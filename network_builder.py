@@ -79,10 +79,14 @@ def _simulate_single_trial(net, tstop, dt, trial_idx):
             _CVODE.event(tt, simulation_time)
 
         if 'bursty' in [net.external_drives[ikey]['type'] for ikey in net.external_drives.keys()]:
-            beta_tau2 = net.cell_types['L5_pyramidal'].synapses['gabab']['tau2']
-            final_drive = net.external_drives['betadist1']['dynamics']['tstart']
+            beta_tau2 = int(net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'])
+            final_drive = int(net.external_drives['betadist1']['dynamics']['tstart'])
             update_time = final_drive+beta_tau2; 
-            # 200ms into simulation -> REFINE TO 200MS AFTER LAST BETA DRIVE
+            # 200ms into simulation
+            _CVODE.event(update_time,update_gabab)
+        else:
+            # immediately - 1 ms into sim
+            update_time = 1
             _CVODE.event(update_time,update_gabab)
 
     h.fcurrent()
