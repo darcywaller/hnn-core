@@ -342,6 +342,8 @@ def basket(cell_name, pos=(0, 0, 0), gid=None):
     """
     if cell_name == 'L2Basket':
         sect_loc = dict(proximal=['soma'], distal=['soma'])
+    elif cell_name == 'L2GABAbBasket':
+        sect_loc = dict(proximal=['soma'], distal=['soma'])
     elif cell_name == 'L5Basket':
         sect_loc = dict(proximal=['soma'], distal=[])
     else:

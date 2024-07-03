@@ -142,6 +142,28 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     net.add_connection(
         src_cell, target_cell, loc, receptor, weight, delay, lamtha)
 
+    # xx -> layer2gabab Basket
+    src_cell = 'L2_pyramidal'
+    target_cell = 'L2GABAb_basket'
+    surrog_target_cell = 'L2_basket'
+    lamtha = 3.
+    key = f'gbar_L2Pyr_{_short_name(surrog_target_cell)}'
+    weight = net._params[key]
+    loc = 'soma'
+    receptor = 'ampa'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
+    src_cell = 'L2GABAb_basket'
+    surrog_target_cell = 'L2_basket'
+    lamtha = 20.
+    key = f'gbar_L2Basket_{_short_name(surrog_target_cell)}'
+    weight = net._params[key]
+    loc = 'soma'
+    receptor = 'gabaa'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
     # xx -> layer5 Basket
     src_cell = 'L5_basket'
     target_cell = 'L5_basket'
@@ -396,8 +418,10 @@ def diesburg_beta_2024_model(params=None, add_drives_from_params=False,
     del net.connectivity[10]  # Original paper simply sets gbar to 0.0
 
     # Add L2_basket -> L5_pyramidal gabab connection
+    # in this setup, a separate population of cells we'll turn off 
+    # after the beta event ends
     delay = net.delay
-    src_cell = 'L2_basket'
+    src_cell = 'L2GABAb_basket'
     target_cell = 'L5_pyramidal'
     lamtha = 50.
     weight = 0.0002

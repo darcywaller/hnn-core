@@ -68,10 +68,22 @@ def _simulate_single_trial(net, tstop, dt, trial_idx):
 
     def simulation_time():
         print(f'Trial {trial_idx + 1}: {round(h.t, 2)} ms...')
-
+        
+    def update_gabab():
+        # set all L2GABAb -> L5 pyr connections to 0 when called
+        for nc in neuron_net.ncs['L2GABAbBasket_L5Pyr_gabab']:
+            nc.weight[0] = 0
+        
     if rank == 0:
         for tt in range(0, int(h.tstop), 10):
             _CVODE.event(tt, simulation_time)
+
+        if 'bursty' in [net.external_drives[ikey]['type'] for ikey in net.external_drives.keys()]:
+            beta_tau2 = net.cell_types['L5_pyramidal'].synapses['gabab']['tau2']
+            final_drive = net.external_drives['betadist1']['dynamics']['tstart']
+            update_time = final_drive+beta_tau2; 
+            # 200ms into simulation -> REFINE TO 200MS AFTER LAST BETA DRIVE
+            _CVODE.event(update_time,update_gabab)
 
     h.fcurrent()
 
@@ -612,6 +624,8 @@ class NetworkBuilder(object):
                         else:
                             seg.v = -72.
                     elif cell.name == 'L2Basket':
+                        seg.v = -64.9737
+                    elif cell.name == 'L2GABAbBasket':
                         seg.v = -64.9737
                     elif cell.name == 'L5Basket':
                         seg.v = -64.9737

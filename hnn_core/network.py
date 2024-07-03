@@ -52,8 +52,9 @@ def _create_cell_coords(n_pyr_x, n_pyr_y, zdiff, inplane_distance):
     -------
     pos_dict : dict of list of tuple (x, y, z)
         Dictionary containing coordinate positions.
-        Keys are 'L2_pyramidal', 'L5_pyramidal', 'L2_basket', 'L5_basket',
-        'common', or any of the elements of the list p_unique_keys
+        Keys are 'L2_pyramidal', 'L5_pyramidal', 'L2_basket', L2GABAb_basket
+        'L5_basket','common', or any of the elements of the 
+        list p_unique_keys
 
     Notes
     -----
@@ -103,6 +104,9 @@ def _create_cell_coords(n_pyr_x, n_pyr_y, zdiff, inplane_distance):
         'L2_basket': _calc_basket_coord(n_pyr_x, n_pyr_y, zdiff,
                                         inplane_distance, weight=0.8
                                         ),
+        'L2GABAb_basket': _calc_basket_coord(n_pyr_x, n_pyr_y, zdiff,
+                                        inplane_distance, weight=0.8
+                                        ), # same as typical L2 basket
         'origin': _calc_origin(xxrange, yyrange, zdiff),
     }
 
@@ -193,14 +197,16 @@ def pick_connection(net, src_gids=None, target_gids=None,
         The Network object
     src_gids : str | int | range | list of int | None
         Identifier for source cells. Passing str arguments
-        ('L2_pyramidal', 'L2_basket', 'L5_pyramidal', 'L5_basket') is
-        equivalent to passing a list of gids for the relevant cell type.
-        source - target connections are made in an all-to-all pattern.
+        ('L2_pyramidal', 'L2_basket', 'L2GABAb_basket', 'L5_pyramidal',
+        'L5_basket') is equivalent to passing a list of gids for the 
+        relevant cell type. source - target connections are made in an
+        all-to-all pattern.
     target_gids : str | int | range | list of int | None
         Identifier for targets of source cells. Passing str arguments
-        ('L2_pyramidal', 'L2_basket', 'L5_pyramidal', 'L5_basket') is
-        equivalent to passing a list of gids for the relevant cell type.
-        source - target connections are made in an all-to-all pattern.
+        ('L2_pyramidal', 'L2_basket', 'L2GABAb_basket', 'L5_pyramidal', 
+        'L5_basket') is equivalent to passing a list of gids for the
+        relevant cell type. source - target connections are made in an
+        all-to-all pattern.
     loc : str | list of str | None
         Location of synapse on target cell. Must be
         'proximal', 'distal', or 'soma'. Note that inhibitory synapses
@@ -332,8 +338,8 @@ class Network:
         Examples: 'L2_basket': range(0, 270), 'evdist1': range(272, 542), etc
     pos_dict : dict
         Dictionary containing the coordinate positions of all cells.
-        Keys are 'L2_pyramidal', 'L5_pyramidal', 'L2_basket', 'L5_basket',
-        or any external drive name
+        Keys are 'L2_pyramidal', 'L5_pyramidal', 'L2_basket', 'L2GABAb_basket',
+        'L5_basket', or any external drive name
     cell_response : CellResponse
         An instance of the CellResponse object.
     external_drives : dict (keys: drive names) of dict (keys: parameters)
@@ -393,6 +399,7 @@ class Network:
         # Source dict of names, first real ones only!
         cell_types = {
             'L2_basket': basket(cell_name=_short_name('L2_basket')),
+            'L2GABAb_basket': basket(cell_name=_short_name('L2GABAb_basket')),
             'L2_pyramidal': pyramidal(cell_name=_short_name('L2_pyramidal')),
             'L5_basket': basket(cell_name=_short_name('L5_basket')),
             'L5_pyramidal': pyramidal(cell_name=_short_name('L5_pyramidal'))
@@ -447,8 +454,9 @@ class Network:
         class_name = self.__class__.__name__
         s = ("%d x %d Pyramidal cells (L2, L5)"
              % (self._N_pyr_x, self._N_pyr_y))
-        s += ("\n%d L2 basket cells\n%d L5 basket cells"
+        s += ("\n%d L2 basket cells\n%d L2GABAb basket cells\n%d L5 basket cells"
               % (len(self.pos_dict['L2_basket']),
+                 len(self.pos_dict['L2GABAb_basket']),
                  len(self.pos_dict['L5_basket'])))
         return '<%s | %s>' % (class_name, s)
 

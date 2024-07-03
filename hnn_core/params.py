@@ -110,16 +110,18 @@ def read_params(params_fname, file_contents=None):
 
 
 def _long_name(short_name):
-    long_name = dict(L2Basket='L2_basket', L5Basket='L5_basket',
-                     L2Pyr='L2_pyramidal', L5Pyr='L5_pyramidal')
+    long_name = dict(L2Basket='L2_basket', L2GABAbBasket='L2GABAb_basket',
+                     L5Basket='L5_basket', L2Pyr='L2_pyramidal',
+                     L5Pyr='L5_pyramidal')
     if short_name in long_name:
         return long_name[short_name]
     return short_name
 
 
 def _short_name(short_name):
-    long_name = dict(L2_basket='L2Basket', L5_basket='L5Basket',
-                     L2_pyramidal='L2Pyr', L5_pyramidal='L5Pyr')
+    long_name = dict(L2_basket='L2Basket', L2GABAb_basket='L2GABAbBasket',
+                     L5_basket='L5Basket', L2_pyramidal='L2Pyr',
+                     L5_pyramidal='L5Pyr')
     if short_name in long_name:
         return long_name[short_name]
     return short_name
@@ -421,9 +423,9 @@ def check_evoked_synkeys(p, nprox, ndist):
     # make sure ampa,nmda gbar values are in the param dict for evoked
     # inputs(for backwards compatibility)
     # evoked distal target cell types
-    lctprox = ['L2Pyr', 'L5Pyr', 'L2Basket', 'L5Basket']
+    lctprox = ['L2Pyr', 'L5Pyr', 'L2Basket', 'L2GABAbBasket', 'L5Basket']
     # evoked proximal target cell types
-    lctdist = ['L2Pyr', 'L5Pyr', 'L2Basket']
+    lctdist = ['L2Pyr', 'L5Pyr', 'L2GABAbBasket','L2Basket']
     lsy = ['ampa', 'nmda']  # synapse types used in evoked inputs
     for nev, pref, lct in zip([nprox, ndist], ['evprox_', 'evdist_'],
                               [lctprox, lctdist]):
@@ -490,6 +492,10 @@ def create_pext(p, tstop):
                           p['input_prox_A_delay_L2']),
         'L2Basket_nmda': (p['input_prox_A_weight_L2Basket_nmda'],
                           p['input_prox_A_delay_L2']),
+        'L2GABAbBasket_ampa': (p['input_prox_A_weight_L2GABAbBasket_ampa'],
+                          p['input_prox_A_delay_L2']),
+        'L2GABAbBasket_nmda': (p['input_prox_A_weight_L2GABAbBasket_nmda'],
+                          p['input_prox_A_delay_L2']),
         'L5Basket_ampa': (p['input_prox_A_weight_L5Basket_ampa'],
                           p['input_prox_A_delay_L5']),
         'L5Basket_nmda': (p['input_prox_A_weight_L5Basket_nmda'],
@@ -523,6 +529,10 @@ def create_pext(p, tstop):
         'L2Basket_ampa': (p['input_dist_A_weight_L2Basket_ampa'],
                           p['input_dist_A_delay_L2']),
         'L2Basket_nmda': (p['input_dist_A_weight_L2Basket_nmda'],
+                          p['input_dist_A_delay_L2']),
+        'L2GABAbBasket_ampa': (p['input_dist_A_weight_L2GABAbBasket_ampa'],
+                          p['input_dist_A_delay_L2']),
+        'L2GABAbBasket_nmda': (p['input_dist_A_weight_L2GABAbBasket_nmda'],
                           p['input_dist_A_delay_L2']),
         'events_per_cycle': p['events_per_cycle_dist'],
         'prng_seedcore': int(p['prng_seedcore_input_dist']),
@@ -560,6 +570,9 @@ def create_pext(p, tstop):
             'L2_basket': (p['gbar_' + skey + '_L2Basket_ampa'],
                           p['gbar_' + skey + '_L2Basket_nmda'],
                           0.1, p['sigma_t_' + skey]),
+            'L2GABAb_basket': (p['gbar_' + skey + '_L2GABAbBasket_ampa'],
+                          p['gbar_' + skey + '_L2GABAbBasket_nmda'],
+                          0.1, p['sigma_t_' + skey]),
             'L5_pyramidal': (p['gbar_' + skey + '_L5Pyr_ampa'],
                              p['gbar_' + skey + '_L5Pyr_nmda'],
                              1., p['sigma_t_' + skey]),
@@ -589,6 +602,9 @@ def create_pext(p, tstop):
             'L2_basket': (p['gbar_' + skey + '_L2Basket_ampa'],
                           p['gbar_' + skey + '_L2Basket_nmda'],
                           0.1, p['sigma_t_' + skey]),
+            'L2GABAb_basket': (p['gbar_' + skey + '_L2GABAbBasket_ampa'],
+                          p['gbar_' + skey + '_L2GABAbBasket_nmda'],
+                          0.1, p['sigma_t_' + skey]),
             'prng_seedcore': int(p['prng_seedcore_' + skey]),
             'lamtha': 3.,
             'loc': 'distal',
@@ -607,6 +623,10 @@ def create_pext(p, tstop):
                       p['L2Basket_Gauss_A_weight'],
                       1., p['L2Basket_Gauss_mu'],
                       p['L2Basket_Gauss_sigma']),
+        'L2GABAb_basket': (p['L2GABAbBasket_Gauss_A_weight'],
+                      p['L2GABAbBasket_Gauss_A_weight'],
+                      1., p['L2GABAbBasket_Gauss_mu'],
+                      p['L2GABAbBasket_Gauss_sigma']),
         'L2_pyramidal': (p['L2Pyr_Gauss_A_weight'],
                          p['L2Pyr_Gauss_A_weight'],
                          0.1, p['L2Pyr_Gauss_mu'], p['L2Pyr_Gauss_sigma']),
@@ -631,6 +651,9 @@ def create_pext(p, tstop):
         'L2_basket': (p['L2Basket_Pois_A_weight_ampa'],
                       p['L2Basket_Pois_A_weight_nmda'],
                       1., p['L2Basket_Pois_lamtha']),
+        'L2GABAb_basket': (p['L2GABAbBasket_Pois_A_weight_ampa'],
+                      p['L2GABAbBasket_Pois_A_weight_nmda'],
+                      1., p['L2GABAbBasket_Pois_lamtha']),
         'L2_pyramidal': (p['L2Pyr_Pois_A_weight_ampa'],
                          p['L2Pyr_Pois_A_weight_nmda'],
                          0.1, p['L2Pyr_Pois_lamtha']),
