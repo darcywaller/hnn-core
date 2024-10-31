@@ -8,7 +8,6 @@ import numpy as np
 from itertools import cycle
 import colorsys
 import warnings
-
 from .externals.mne import _validate_type
 
 
@@ -328,7 +327,9 @@ def plot_dipole(dpl, tmin=None, tmax=None, ax=None, layer='agg', decim=None,
                 r'$\times$ {:.0f})'.format(scale_applied)
         ax.set_ylabel(ylabel, multialignment='center')
         if layer == 'agg':
-            title_str = 'Aggregate (L2 + L5)'
+            title_str = 'Aggregate (L2/3 + L5)'
+        elif layer == 'L2':
+            title_str = 'L2/3'
         else:
             title_str = layer
         ax.set_title(title_str)
@@ -338,7 +339,8 @@ def plot_dipole(dpl, tmin=None, tmax=None, ax=None, layer='agg', decim=None,
 
 
 def plot_spikes_hist(cell_response, trial_idx=None, ax=None, spike_types=None,
-                     color=None, show=True, **kwargs_hist):
+                     color=None, invert_spike_types=None, show=True,
+                     **kwargs_hist):
     """Plot the histogram of spiking activity across trials.
 
     Parameters
@@ -368,6 +370,16 @@ def plot_spikes_hist(cell_response, trial_idx=None, ax=None, spike_types=None,
         Valid strings also include leading characters of spike types
 
         | Ex: ``'ev'`` is equivalent to ``['evdist', 'evprox']``
+    invert_spike_types: string | list | None
+        String input of a valid spike type to be mirrored about the y axis
+
+        | Ex: ``'evdist'``, ``'evprox'``, ...
+
+        List of valid spike types to be mirrored about the y axis
+
+        | Ex: ``['evdist', 'evprox']``
+
+        If None, all input spike types are plotted on the same y axis
     color : str | list of str | dict | None
         Input defining colors of plotted histograms. If str, all
         histograms plotted with same color. If list of str provided,
@@ -466,7 +478,10 @@ def plot_spikes_hist(cell_response, trial_idx=None, ax=None, spike_types=None,
     elif isinstance(color, list):
         color_cycle = cycle(color)
 
-    bins = np.linspace(0, spike_times[-1], 50)
+    if len(cell_response.times) > 0:
+        bins = np.linspace(0, cell_response.times[-1], 50)
+    else:
+        bins = np.linspace(0, spike_times[-1], 50)
 
     # Create dictionary to aggregate spike times that have the same spike_label
     spike_type_times = {spike_label: list() for
@@ -486,11 +501,52 @@ def plot_spikes_hist(cell_response, trial_idx=None, ax=None, spike_types=None,
         spike_type_times[spike_label].extend(
             spike_times[spike_types_mask[spike_type]])
 
+    if invert_spike_types is None:
+        invert_spike_types = list()
+    else:
+        if not isinstance(invert_spike_types, (str, list)):
+            raise TypeError(
+                "'invert_spike_types' must be a string or a list of strings")
+        if isinstance(invert_spike_types, str):
+            invert_spike_types = [invert_spike_types]
+
+        # Check that spike types to invert are correctly specified
+        unique_inputs = set(spike_labels.values())
+        unique_invert_inputs = set(invert_spike_types)
+        check_intersection = unique_invert_inputs.intersection(unique_inputs)
+        if not check_intersection == unique_invert_inputs:
+            raise ValueError(
+                "Elements of 'invert_spike_types' must"
+                "map to valid input types"
+            )
+
+    # Initialize secondary axis
+    ax1 = None
+
     # Plot aggregated spike_times
     for spike_label, plot_data in spike_type_times.items():
         hist_color = spike_color[spike_label]
-        ax.hist(plot_data, bins,
-                label=spike_label, color=hist_color, **kwargs_hist)
+
+        # Plot on the primary y-axis
+        if spike_label not in invert_spike_types:
+            ax.hist(plot_data, bins,
+                    label=spike_label, color=hist_color, **kwargs_hist)
+        # Plot on secondary y-axis
+        else:
+            if ax1 is None:
+                ax1 = ax.twinx()
+            ax1.hist(plot_data, bins,
+                     label=spike_label, color=hist_color, **kwargs_hist)
+
+    # Set the y-limits based on the maximum across both axes
+    if ax1 is not None:
+        ax_ylim = ax.get_ylim()[1]
+        ax1_ylim = ax1.get_ylim()[1]
+
+        y_max = max(ax_ylim, ax1_ylim)
+        ax.set_ylim(0, y_max)
+        ax1.set_ylim(0, y_max)
+        ax1.invert_yaxis()
 
     if len(cell_response.times) > 0:
         ax.set_xlim(left=0, right=cell_response.times[-1])
@@ -498,7 +554,17 @@ def plot_spikes_hist(cell_response, trial_idx=None, ax=None, spike_types=None,
         ax.set_xlim(left=0)
 
     ax.set_ylabel("Counts")
-    ax.legend()
+
+    if ax1 is not None:
+        # Combine legends
+        handles, labels = ax.get_legend_handles_labels()
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        handles.extend(handles1)
+        labels.extend(labels1)
+
+        ax.legend(handles, labels, loc='upper left')
+    else:
+        ax.legend()
 
     plt_show(show)
     return ax.get_figure()
@@ -534,17 +600,12 @@ def plot_spikes_raster(cell_response, trial_idx=None, ax=None, show=True):
     _validate_type(trial_idx, list, 'trial_idx', 'int, list of int')
 
     # Extract desired trials
-    if len(cell_response._spike_times[0]) > 0:
-        spike_times = np.concatenate(
-            np.array(cell_response._spike_times, dtype=object)[trial_idx])
-        spike_types = np.concatenate(
-            np.array(cell_response._spike_types, dtype=object)[trial_idx])
-        spike_gids = np.concatenate(
-            np.array(cell_response._spike_gids, dtype=object)[trial_idx])
-    else:
-        spike_times = np.array([])
-        spike_types = np.array([])
-        spike_gids = np.array([])
+    spike_times = np.concatenate(
+        np.array(cell_response._spike_times, dtype=object)[trial_idx])
+    spike_types = np.concatenate(
+        np.array(cell_response._spike_types, dtype=object)[trial_idx])
+    spike_gids = np.concatenate(
+        np.array(cell_response._spike_gids, dtype=object)[trial_idx])
 
     cell_types = ['L2_basket', 'L2GABAb_basket', 'L2_pyramidal', 'L5_basket', 'L5_pyramidal']
     cell_type_colors = {'L5_pyramidal': 'r', 'L5_basket': 'b',
@@ -554,7 +615,6 @@ def plot_spikes_raster(cell_response, trial_idx=None, ax=None, show=True):
     if ax is None:
         _, ax = plt.subplots(1, 1, constrained_layout=True)
 
-    ypos = 0
     events = []
     for cell_type in cell_types:
         cell_type_gids = np.unique(spike_gids[spike_types == cell_type])
@@ -562,12 +622,16 @@ def plot_spikes_raster(cell_response, trial_idx=None, ax=None, show=True):
         for gid in cell_type_gids:
             gid_time = spike_times[spike_gids == gid]
             cell_type_times.append(gid_time)
-            cell_type_ypos.append(ypos)
-            ypos = ypos - 1
+            cell_type_ypos.append(-gid)
 
         if cell_type_times:
             events.append(
                 ax.eventplot(cell_type_times, lineoffsets=cell_type_ypos,
+                             color=cell_type_colors[cell_type],
+                             label=cell_type, linelengths=5))
+        else:
+            events.append(
+                ax.eventplot([-1], lineoffsets=[-1],
                              color=cell_type_colors[cell_type],
                              label=cell_type, linelengths=5))
 
@@ -1233,6 +1297,7 @@ def plot_cell_connectivity(net, conn_idx, src_gid=None, axes=None,
 
 
 def plot_laminar_csd(times, data, contact_labels, ax=None, colorbar=True,
+                     vmin=None, vmax=None, sink='b', interpolation='spline',
                      show=True):
     """Plot laminar current source density (CSD) estimation from LFP array.
 
@@ -1249,6 +1314,19 @@ def plot_laminar_csd(times, data, contact_labels, ax=None, colorbar=True,
     contact_labels : list
         Labels associated with the contacts to plot. Passed as-is to
         :func:`~matplotlib.axes.Axes.set_yticklabels`.
+    vmin: float, optional
+        lower bound of the color axis.
+        Will be set automatically of None.
+    vmax: float, optional
+        upper bound of the color axis.
+        Will be set automatically of None.
+    sink : str
+        If set to 'blue' or 'b', plots sinks in blue and sources in red,
+        if set to 'red' or 'r', sinks plotted in red and sources blue.
+    interpolation : str | None
+        If 'spline', will smoothen the CSD using spline method,
+        if None, no smoothing will be applied.
+
     show : bool
         If True, show the plot.
 
@@ -1258,19 +1336,44 @@ def plot_laminar_csd(times, data, contact_labels, ax=None, colorbar=True,
         The matplotlib figure handle.
     """
     import matplotlib.pyplot as plt
+    from scipy.interpolate import RectBivariateSpline
+
     if ax is None:
         _, ax = plt.subplots(1, 1, constrained_layout=True)
 
-    im = ax.pcolormesh(times, contact_labels, np.array(data),
-                       cmap="jet_r", shading='auto')
-    ax.set_title("CSD")
+    if sink[0].lower() == 'b':
+        cmap = "jet"
+    elif sink[0].lower() == 'r':
+        cmap = "jet_r"
+    elif sink[0].lower() != 'b' or sink[0].lower() != 'r':
+        raise RuntimeError('Please use sink = "b" or sink = "r".'
+                           ' Only colormap "jet" is supported for CSD.')
 
+    if interpolation == 'spline':
+        # create interpolation function
+        interp_data = RectBivariateSpline(times, contact_labels, data.T)
+        # increase number of contacts
+        new_depths = np.linspace(contact_labels[0], contact_labels[-1],
+                                 contact_labels[-1] - contact_labels[0])
+        # interpolate
+        data = interp_data(times, new_depths).T
+    elif interpolation is None:
+        data = data
+        new_depths = contact_labels
+
+    # if vmin and vmax are both None, set colormap such that green = zero
+    if vmin is None and vmax is None:
+        vmin = -np.max(np.abs(data))
+        vmax = np.max(np.abs(data))
+
+    im = ax.pcolormesh(times, new_depths, data,
+                       cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
+    ax.set_xlabel('time (s)')
+    ax.set_ylabel('electrode depth')
     if colorbar:
         color_axis = ax.inset_axes([1.05, 0, 0.02, 1], transform=ax.transAxes)
         plt.colorbar(im, ax=ax, cax=color_axis).set_label(r'$CSD (uV/um^{2})$')
 
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Electrode depth')
     plt.tight_layout()
     plt_show(show)
 
