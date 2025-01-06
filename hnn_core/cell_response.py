@@ -17,14 +17,14 @@ class CellResponse(object):
 
     Parameters
     ----------
-    spike_times : list (n_trials,) of list (n_spikes,) of float | None
+    spike_times : list (n_trials,) of list (n_spikes,) of float, shape | None
         Each element of the outer list is a trial.
         The inner list contains the time stamps of spikes.
-    spike_gids : list (n_trials,) of list (n_spikes,) of float | None
+    spike_gids : list (n_trials,) of list (n_spikes,) of float, shape | None
         Each element of the outer list is a trial.
         The inner list contains the cell IDs of neurons that
         spiked.
-    spike_types : list (n_trials,) of list (n_spikes,) of float | None
+    spike_types : list (n_trials,) of list (n_spikes,) of float, shape | None
         Each element of the outer list is a trial.
         The inner list contains the type of spike (e.g., evprox1
         or L2_pyramidal) that occurred at the corresponding time stamp.
@@ -38,28 +38,24 @@ class CellResponse(object):
 
     Attributes
     ----------
-    spike_times : list (n_trials,) of list (n_spikes,) of float
+    spike_times : list (n_trials,) of list (n_spikes,) of float, shape
         Each element of the outer list is a trial.
         The inner list contains the time stamps of spikes.
-    spike_gids : list (n_trials,) of list (n_spikes,) of float
+    spike_gids : list (n_trials,) of list (n_spikes,) of float, shape
         Each element of the outer list is a trial.
         The inner list contains the cell IDs of neurons that
         spiked.
-    spike_types : list (n_trials,) of list (n_spikes,) of float
+    spike_types : list (n_trials,) of list (n_spikes,) of float, shape
         Each element of the outer list is a trial.
         The inner list contains the type of spike (e.g., evprox1
         or L2_pyramidal) that occurred at the corresponding time stamp.
         Each gid corresponds to a type via Network::gid_ranges.
-    vsec : list (n_trials,) of dict
+    vsec : list (n_trials,) of dict, shape
         Each element of the outer list is a trial.
         Dictionary indexed by gids containing voltages for cell sections.
-    isec : list (n_trials,) of dict
+    isec : list (n_trials,) of dict, shape
         Each element of the outer list is a trial.
         Dictionary indexed by gids containing currents for cell sections.
-    ca : list (n_trials,) of dict, shape
-        Each element of the outer list is a trial.
-        Dictionary indexed by gids containing calcium concentration
-        for cell sections.
     times : array-like, shape (n_times,)
         Array of time points for samples in continuous data.
         This includes vsoma and isoma.
@@ -93,7 +89,8 @@ class CellResponse(object):
 
         if cell_type_names is None:
             cell_type_names = ['L2_basket', 'L2_pyramidal',
-                               'L5_basket', 'L5_pyramidal']
+                               'L2GABAb_basket','L5_basket',
+                               'L5_pyramidal']
 
         # Validate arguments
         arg_names = ['spike_times', 'spike_gids', 'spike_types']
@@ -119,7 +116,6 @@ class CellResponse(object):
         self._spike_types = spike_types
         self._vsec = list()
         self._isec = list()
-        self._ca = list()
         if times is not None:
             if not isinstance(times, (list, np.ndarray)):
                 raise TypeError("'times' is an np.ndarray of simulation times")
@@ -142,36 +138,80 @@ class CellResponse(object):
         return (times_self == times_other and
                 self._spike_gids == other._spike_gids and
                 self._spike_types == other._spike_types and
-                self._vsec == other._vsec and
-                self._isec == other._isec and
-                self._ca == other._ca and
                 self.vsec == other.vsec and
-                self.isec == other.isec and
-                self.ca == other.ca)
+                self.isec == other.isec)
+
+    def __getitem__(self, gid_item):
+        """Returns a CellResponse object with a copied subset filtered by gid.
+
+        Parameters
+        ----------
+        gid_item : int | slice
+            Subset of gids .
+
+        Returns
+        -------
+        cell_response : instance of CellResponse
+            See below for use cases.
+        """
+
+        if isinstance(gid_item, slice):
+            gid_item = np.arange(gid_item.stop)[gid_item]
+        elif isinstance(gid_item, list):
+            gid_item = np.array(gid_item)
+        elif isinstance(gid_item, np.ndarray):
+            if gid_item.ndim > 1:
+                raise ValueError("ndarray cannot exceed 1 dimension")
+            else:
+                pass
+        elif isinstance(gid_item, int):
+            gid_item = np.array([gid_item])
+        else:
+            raise TypeError("indices must be int, slice, or array-like, "
+                            f"not {type(gid_item).__name__}")
+
+        if not np.issubdtype(gid_item.dtype, np.integer):
+            raise TypeError("gids must be of dtype int, "
+                            f"not {gid_item.dtype.name}")
+
+        n_trials = len(self._spike_times)
+        times_slice = list()
+        gids_slice = list()
+        types_slice = list()
+        vsoma_slice = list()
+        isoma_slice = list()
+        for trial_idx in range(n_trials):
+            gid_mask = np.isin(self._spike_gids[trial_idx], gid_item)
+            times_trial = np.array(
+                self._spike_times[trial_idx])[gid_mask].tolist()
+            gids_trial = np.array(
+                self._spike_gids[trial_idx])[gid_mask].tolist()
+            types_trial = np.array(
+                self._spike_types[trial_idx])[gid_mask].tolist()
+
+            vsoma_trial = {gid: self._vsoma[trial_idx][gid] for gid in gid_item
+                           if gid in self._vsoma[trial_idx].keys()}
+
+            isoma_trial = {gid: self._isoma[trial_idx][gid] for gid in gid_item
+                           if gid in self._isoma[trial_idx].keys()}
+
+            times_slice.append(times_trial)
+            gids_slice.append(gids_trial)
+            types_slice.append(types_trial)
+            vsoma_slice.append(vsoma_trial)
+            isoma_slice.append(isoma_trial)
+
+        cell_response_slice = CellResponse(spike_times=times_slice,
+                                           spike_gids=gids_slice,
+                                           spike_types=types_slice)
+        cell_response_slice._vsoma = vsoma_slice
+        cell_response_slice._isoma = isoma_slice
+
+        return cell_response_slice
 
     @property
     def spike_times(self):
         return self._spike_times
-
-    @property
-    def cell_types(self):
-        """Get unique cell types."""
-        spike_types_data = np.concatenate(np.array(self.spike_types,
-                                                   dtype=object))
-        return np.unique(spike_types_data).tolist()
-
-    @property
-    def spike_times_by_type(self):
-        """Get a dictionary of spike times by cell type"""
-        spike_times = dict()
-        for cell_type in self.cell_types:
-            spike_times[cell_type] = list()
-            for trial_spike_times, trial_spike_types in zip(self.spike_times,
-                                                            self.spike_types):
-                mask = np.isin(trial_spike_types, cell_type)
-                cell_spike_times = np.array(trial_spike_times)[mask].tolist()
-                spike_times[cell_type].append(cell_spike_times)
-        return spike_times
 
     @property
     def spike_gids(self):
@@ -188,10 +228,6 @@ class CellResponse(object):
     @property
     def isec(self):
         return self._isec
-
-    @property
-    def ca(self):
-        return self._ca
 
     @property
     def times(self):
@@ -314,8 +350,7 @@ class CellResponse(object):
             cell_response=self, trial_idx=trial_idx, ax=ax, show=show)
 
     def plot_spikes_hist(self, trial_idx=None, ax=None, spike_types=None,
-                         invert_spike_types=None, color=None, show=True,
-                         **kwargs_hist):
+                         color=None, show=True, **kwargs_hist):
         """Plot the histogram of spiking activity across trials.
 
         Parameters
@@ -367,9 +402,8 @@ class CellResponse(object):
             The matplotlib figure handle.
         """
         return plot_spikes_hist(self, trial_idx=trial_idx, ax=ax,
-                                spike_types=spike_types,
-                                invert_spike_types=invert_spike_types,
-                                color=color, show=show, **kwargs_hist)
+                                spike_types=spike_types, color=color,
+                                show=show, **kwargs_hist)
 
     def to_dict(self):
         """Return cell response as a dict object.
@@ -394,12 +428,6 @@ class CellResponse(object):
             # Turn `int` gid keys into string values for hdf5 format
             trial = dict((str(key), val) for key, val in trial.items())
             cell_response_data['isec'].append(trial)
-        ca_data = self.ca
-        cell_response_data['ca'] = list()
-        for trial in ca_data:
-            # Turn `int` gid keys into string values for hdf5 format
-            trial = dict((str(key), val) for key, val in trial.items())
-            cell_response_data['ca'].append(trial)
         cell_response_data['times'] = self.times
         return cell_response_data
 

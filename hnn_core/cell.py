@@ -348,9 +348,6 @@ class Cell:
         by synapse type (keys can be soma_gabaa, soma_gabab etc.).
         Must be enabled by running simulate_dipole(net, record_isec=True)
         or simulate_dipole(net, record_isoma=True)
-    ca : dict
-        Contains recording of section speicifc calcium concentration.
-        Must be enabled by running simulate_dipole(net, record_ca=True).
     tonic_biases : list of h.IClamp
         The current clamps inserted at each section of the cell
         for tonic biasing inputs.
@@ -394,7 +391,6 @@ class Cell:
         self.dipole_pp = list()
         self.vsec = dict()
         self.isec = dict()
-        self.ca = dict()
         # insert iclamp
         self.list_IClamp = list()
         self._gid = None
@@ -472,7 +468,6 @@ class Cell:
         cell_data['dipole_pp'] = self.dipole_pp
         cell_data['vsec'] = self.vsec
         cell_data['isec'] = self.isec
-        cell_data['ca'] = self.ca
         cell_data['tonic_biases'] = self.tonic_biases
         return cell_data
 
@@ -597,8 +592,12 @@ class Cell:
             for receptor in sections[sec_name].syns:
                 syn_key = f'{sec_name}_{receptor}'
                 seg = self._nrn_sections[sec_name](0.5)
-                self._nrn_synapses[syn_key] = self.syn_create(
-                    seg, **synapses[receptor])
+                if receptor != 'gabab':
+                    self._nrn_synapses[syn_key] = self.syn_create(
+                        seg, **synapses[receptor])
+                else:
+                    self._nrn_synapses[syn_key] = self.syn_create_gabab(
+                        seg, **synapses[receptor])
 
     def _create_sections(self, sections, cell_tree):
         """Create soma and set geometry.
@@ -748,7 +747,7 @@ class Cell:
         stim.amp = amplitude
         self.tonic_biases.append(stim)
 
-    def record(self, record_vsec=False, record_isec=False, record_ca=False):
+    def record(self, record_vsec=False, record_isec=False):
         """ Record current and voltage from all sections
 
         Parameters
@@ -759,9 +758,6 @@ class Cell:
         record_isec : 'all' | 'soma' | False
             Option to record voltages from all sections ('all'), or just
             the soma ('soma'). Default: False.
-        record_ca : 'all' | 'soma' | False
-            Option to record calcium concentration from all sections ('all'),
-            or just the soma ('soma'). Default: False.
         """
 
         section_names = list(self.sections.keys())
@@ -791,21 +787,9 @@ class Cell:
 
                 for syn_name in self.isec[sec_name]:
                     self.isec[sec_name][syn_name] = h.Vector()
+
                     self.isec[sec_name][syn_name].record(
                         self._nrn_synapses[syn_name]._ref_i)
-
-        # calcium concentration
-        if record_ca == 'soma':
-            self.ca = dict.fromkeys(['soma'])
-        elif record_ca == 'all':
-            self.ca = dict.fromkeys(section_names)
-
-        if record_ca:
-            for sec_name in self.ca:
-                if hasattr(self._nrn_sections[sec_name](0.5), '_ref_cai'):
-                    self.ca[sec_name] = h.Vector()
-                    self.ca[sec_name].record(
-                        self._nrn_sections[sec_name](0.5)._ref_cai)
 
     def syn_create(self, secloc, e, tau1, tau2):
         """Create an h.Exp2Syn synapse.
@@ -833,6 +817,34 @@ class Cell:
         syn.e = e
         syn.tau1 = tau1
         syn.tau2 = tau2
+        return syn
+
+    def syn_create_gabab(self, secloc, e, tau1, tau2):
+        """Create a GABAb synapse with mod file.
+
+        Parameters
+        ----------
+        secloc : instance of nrn.Segment
+            The section location. E.g., soma(0.5).
+        e: float
+            Reverse potential (in mV)
+        tau1: float
+            Rise time (in ms)
+        tau2: float
+            Decay time (in ms)
+
+        Returns
+        -------
+        syn : instance of h.GABAB
+            A kinetic scheme synapse.
+        """
+        if not isinstance(secloc, nrn.Segment):
+            raise TypeError(f'secloc must be instance of'
+                            f'nrn.Segment. Got {type(secloc)}')
+        syn = h.GABAB(secloc) 
+        #syn.e = e
+        #syn.tau1 = tau1
+        #syn.tau2 = tau2
         return syn
 
     def setup_source_netcon(self, threshold):

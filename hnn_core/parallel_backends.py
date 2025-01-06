@@ -53,7 +53,6 @@ def _gather_trial_data(sim_data, net, n_trials, postproc):
         net.cell_response.update_types(net.gid_ranges)
         net.cell_response._vsec.append(sim_data[idx]['vsec'])
         net.cell_response._isec.append(sim_data[idx]['isec'])
-        net.cell_response._ca.append(sim_data[idx]['ca'])
 
         # extracellular array
         for arr_name, arr in net.rec_arrays.items():
@@ -84,8 +83,7 @@ def _gather_trial_data(sim_data, net, n_trials, postproc):
 def _get_mpi_env():
     """Set some MPI environment variables."""
     my_env = os.environ.copy()
-    # For Linux systems
-    if sys.platform != 'win32':
+    if 'win' not in sys.platform:
         my_env["OMPI_MCA_btl_base_warn_component_unused"] = '0'
 
     if 'darwin' in sys.platform:
@@ -649,7 +647,10 @@ class MPIBackend(object):
                          'mpi_child.py')
 
         # Split the command into shell arguments for passing to Popen
-        use_posix = True if sys.platform != 'win32' else False
+        if 'win' in sys.platform:
+            use_posix = True
+        else:
+            use_posix = False
         self.mpi_cmd = shlex.split(self.mpi_cmd, posix=use_posix)
 
     def __enter__(self):

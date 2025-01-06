@@ -32,6 +32,14 @@ def get_params_default(nprox=2, ndist=1):
         'L2Basket_Pois_A_weight_nmda': 0.,
         'L2Basket_Pois_lamtha': 0.,
 
+        # L2 GABAb Basket params
+        'L2GABAbBasket_Gauss_A_weight': 0.,
+        'L2GABAbBasket_Gauss_mu': 2000.,
+        'L2GABAbBasket_Gauss_sigma': 3.6,
+        'L2GABAbBasket_Pois_A_weight_ampa': 0.,
+        'L2GABAbBasket_Pois_A_weight_nmda': 0.,
+        'L2GABAbBasket_Pois_lamtha': 0.,
+
         # L2 Pyr params
         'L2Pyr_Gauss_A_weight': 0.,
         'L2Pyr_Gauss_mu': 2000.,
@@ -67,6 +75,10 @@ def get_params_default(nprox=2, ndist=1):
         'gbar_L2Pyr_L2Basket': 0.,
         'gbar_L2Basket_L2Basket': 0.,
 
+        # max conductances TO L2GABAbBaskets
+        'gbar_L2Pyr_L2GABAbBasket': 0.,
+        'gbar_L2GABAbBasket_L2GABAbBasket': 0.,
+        
         # max conductances TO L5Pyr
         'gbar_L5Pyr_L5Pyr_ampa': 0.,
         'gbar_L5Pyr_L5Pyr_nmda': 0.,
@@ -107,6 +119,8 @@ def get_params_default(nprox=2, ndist=1):
         'input_prox_A_weight_L5Pyr_nmda': 0.,
         'input_prox_A_weight_L2Basket_ampa': 0.,
         'input_prox_A_weight_L2Basket_nmda': 0.,
+        'input_prox_A_weight_L2GABAbBasket_ampa': 0.,
+        'input_prox_A_weight_L2GABAbBasket_nmda': 0.,
         'input_prox_A_weight_L5Basket_ampa': 0.,
         'input_prox_A_weight_L5Basket_nmda': 0.,
         'input_prox_A_delay_L2': 0.1,
@@ -120,6 +134,8 @@ def get_params_default(nprox=2, ndist=1):
         'input_dist_A_weight_L5Pyr_nmda': 0.,
         'input_dist_A_weight_L2Basket_ampa': 0.,
         'input_dist_A_weight_L2Basket_nmda': 0.,
+        'input_dist_A_weight_L2GABAbBasket_ampa': 0.,
+        'input_dist_A_weight_L2GABAbBasket_nmda': 0.,
         'input_dist_A_delay_L2': 5.,
         'input_dist_A_delay_L5': 5.,
 
@@ -149,7 +165,6 @@ def get_params_default(nprox=2, ndist=1):
         'record_isoma': 0,  # whether to record somatic currents
         'record_vsec': 0,  # whether to record voltages
         'record_isec': 0,  # whether to record currents
-        'record_ca': 0,  # whether to record calcium concentration
 
         # numerics
         # N_trials of 1 means that seed is set by rank

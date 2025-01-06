@@ -7,7 +7,7 @@ import hnn_core
 from hnn_core import read_params
 from .network import Network
 from .params import _short_name
-from .cells_default import pyramidal_ca
+from .cells_default import pyramidal_ca, pyramidal_PFC
 from .externals.mne import _validate_type
 
 
@@ -142,6 +142,28 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     net.add_connection(
         src_cell, target_cell, loc, receptor, weight, delay, lamtha)
 
+    # xx -> layer2gabab Basket
+    src_cell = 'L2_pyramidal'
+    target_cell = 'L2GABAb_basket'
+    surrog_target_cell = 'L2_basket'
+    lamtha = 3.
+    key = f'gbar_L2Pyr_{_short_name(surrog_target_cell)}'
+    weight = net._params[key]
+    loc = 'soma'
+    receptor = 'ampa'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
+    src_cell = 'L2GABAb_basket'
+    surrog_target_cell = 'L2_basket'
+    lamtha = 20.
+    key = f'gbar_L2Basket_{_short_name(surrog_target_cell)}'
+    weight = net._params[key]
+    loc = 'soma'
+    receptor = 'gabaa'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
     # xx -> layer5 Basket
     src_cell = 'L5_basket'
     target_cell = 'L5_basket'
@@ -220,12 +242,18 @@ def law_2021_model(params=None, add_drives_from_params=False,
     net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'] = 200.0
 
     # Decrease L5_pyramidal -> L5_pyramidal nmda weight
-    net.connectivity[2]['nc_dict']['A_weight'] = 0.0004
-
+    #net.connectivity[2]['nc_dict']['A_weight'] = 0.0004
+    net.connectivity[0]['nc_dict']['A_weight'] = 0.00013
+    net.connectivity[2]['nc_dict']['A_weight'] = 0.00025
+    
     # Modify L5_basket -> L5_pyramidal inhibition
-    net.connectivity[6]['nc_dict']['A_weight'] = 0.02  # gabaa
-    net.connectivity[7]['nc_dict']['A_weight'] = 0.005  # gabab
+    #net.connectivity[6]['nc_dict']['A_weight'] = 0.02  # gabaa
+    #net.connectivity[7]['nc_dict']['A_weight'] = 0.005  # gabab
+    net.connectivity[7]['nc_dict']['A_weight'] = 0.15  # gabab
 
+    # l2 basket -> l2 pyr is .05 by default
+    net.connectivity[5]['nc_dict']['A_weight'] = 0.15  # gabab
+    
     # Remove L5 pyramidal somatic and basal dendrite calcium channels
     for sec in ['soma', 'basal_1', 'basal_2', 'basal_3']:
         del net.cell_types['L5_pyramidal'].sections[
@@ -236,10 +264,10 @@ def law_2021_model(params=None, add_drives_from_params=False,
 
     # Add L2_basket -> L5_pyramidal gabab connection
     delay = net.delay
-    src_cell = 'L2_basket'
+    src_cell = 'L2GABAb_basket'
     target_cell = 'L5_pyramidal'
     lamtha = 50.
-    weight = 0.0002
+    weight = .11 #0.0002
     loc = 'distal'
     receptor = 'gabab'
     net.add_connection(
@@ -309,6 +337,218 @@ def calcium_model(params=None, add_drives_from_params=False,
     return net
 
 
+def diesburg_2024_model(params=None, add_drives_from_params=False,
+                        legacy_mode=False, mesh_shape=(10, 10)):
+    """Instantiate the expansion of Jones 2009 model to study
+    evoked potentials in the frontocentral cortex as described in
+    Diesburg et al. biorxiv, 2023 [1]_
+
+    Returns
+    -------
+    net : Instance of Network object
+        Network object used to store the model used in
+        Diesburg et al. 2023.
+
+    See Also
+    --------
+    jones_2009_model
+
+    Notes
+    -----
+    Model reproduces results from Diesburg et al. 2023
+    This model differs from the default network model in several
+    parameters including
+    1) Increase L2_pyramidal -> L2_pyramidal ampa weight
+    2) Increase L2_pyramidal -> L2_pyramidal nmda weight
+    3) Increase L2_basket -> L2_pyramidal gabaa weight
+    4) Increase L2_basket -> L2_pyramidal gabab weight
+    5) Increase L2_pyramidal -> L5_pyramidal weight
+    6) Increase L5_pyramidal -> L5_pyramidal ampa weight
+    7) Increase L5_pyramidal -> L5_pyramidal nmda weight
+    8) Increase L5_basket -> L5_pyramidal gabab weight
+
+    References
+    ----------
+    .. [1] Diesburg, Darcy, et al. "Biophysical modeling of
+           frontocentral ERP generation links circuit-level
+           mechanisms of action-stopping to a behavioral race model."
+           biorxiv (2023).
+    """
+    net = jones_2009_model(params, add_drives_from_params, legacy_mode,
+                          mesh_shape)
+
+    # Replace L5 pyramidal cell template
+    cell_name = 'L5_pyramidal'
+    pos = net.cell_types[cell_name].pos
+    net.cell_types[cell_name] = pyramidal_PFC(
+        cell_name=_short_name(cell_name), pos=pos)
+
+    # Modify L2_pyramidal -> L2_pyramidal excitation
+    net.connectivity[0]['nc_dict']['A_weight'] = 0.00000375  # .00075 nmda
+    net.connectivity[1]['nc_dict']['A_weight'] = 0.00000375  # .00075 ampa
+
+    # Modify L2_basket -> L2_pyramidal inhibition
+    net.connectivity[4]['nc_dict']['A_weight'] = 0.0005  # .1 gabaa
+    net.connectivity[5]['nc_dict']['A_weight'] = 0.0005  # .1 gabab
+
+    # Modify L2_pyramidal -> L5_pyramidal excitation
+    net.connectivity[8]['nc_dict']['A_weight'] = 0.0005  # proximal
+    net.connectivity[9]['nc_dict']['A_weight'] = 0.0005  # distal
+
+    # Modify L5_pyramidal -> L5_pyramidal excitation
+    net.connectivity[2]['nc_dict']['A_weight'] = 0.00000375  # nmda 
+    net.connectivity[3]['nc_dict']['A_weight'] = 0.00000375  # ampa
+
+    # Modify L5_basket -> L5_pyramidal inhibition
+    net.connectivity[7]['nc_dict']['A_weight'] = 0.0005  # .075 gabab 
+
+    # Update biophysics (increase gabab duration of inhibition)
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau2'] = 200.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'] = 200.0
+
+    # scale other weights
+    net.connectivity[6]['nc_dict']['A_weight'] = 0.000125  # .025 
+    net.connectivity[10]['nc_dict']['A_weight'] = 5e-06  # .001 
+    net.connectivity[11]['nc_dict']['A_weight'] = 2.5e-05  # .0005 
+    net.connectivity[12]['nc_dict']['A_weight'] = 0.0001  # .02 
+    net.connectivity[13]['nc_dict']['A_weight'] = 0.0001  # .02
+    net.connectivity[14]['nc_dict']['A_weight'] = 2.5e-05  # .0005 
+    net.connectivity[15]['nc_dict']['A_weight'] = 1.25e-06  # .00025 
+
+    # other law model changes
+    # Remove L2_basket -> L5_pyramidal gabaa connection
+    del net.connectivity[10]  # Original paper simply sets gbar to 0.0
+
+    # Add L2_basket -> L5_pyramidal gabab connection
+    delay = net.delay
+    src_cell = 'L2GABAb_basket'
+    target_cell = 'L5_pyramidal'
+    lamtha = 50.
+    weight = 0.0002
+    loc = 'distal'
+    receptor = 'gabab'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+    
+    return net
+
+
+def diesburg_beta_2024_model(params=None, add_drives_from_params=False,
+                        legacy_mode=False):
+    """Instantiate the expansion of Jones 2009 model to study
+    evoked potentials in the frontocentral cortex as described in
+    Diesburg et al. biorxiv, 2023 [1]_
+
+    Returns
+    -------
+    net : Instance of Network object
+        Network object used to store the model used in
+        Diesburg et al. 2023.
+
+    See Also
+    --------
+    jones_2009_model
+
+    Notes
+    -----
+    Model reproduces results from Diesburg et al. 2023
+    This model differs from the default network model in several
+    parameters including
+    1) Increase L2_pyramidal -> L2_pyramidal ampa weight
+    2) Increase L2_pyramidal -> L2_pyramidal nmda weight
+    3) Increase L2_basket -> L2_pyramidal gabaa weight
+    4) Increase L2_basket -> L2_pyramidal gabab weight
+    5) Increase L2_pyramidal -> L5_pyramidal weight
+    6) Increase L5_pyramidal -> L5_pyramidal ampa weight
+    7) Increase L5_pyramidal -> L5_pyramidal nmda weight
+    8) Increase L5_basket -> L5_pyramidal gabab weight
+
+    References
+    ----------
+    .. [1] Diesburg, Darcy, et al. "Biophysical modeling of
+           frontocentral ERP generation links circuit-level
+           mechanisms of action-stopping to a behavioral race model."
+           biorxiv (2023).
+    """
+    net = jones_2009_model(params, add_drives_from_params, legacy_mode)
+
+    # THESE ARE ALL PFC model changes following JNEURO paper
+    # Replace L5 pyramidal cell template with updated calcium
+    cell_name = 'L5_pyramidal'
+    pos = net.cell_types[cell_name].pos
+    net.cell_types[cell_name] = pyramidal_PFC(
+        cell_name=_short_name(cell_name), pos=pos)
+
+    # Modify L2_pyramidal -> L2_pyramidal excitation
+    # net.connectivity[0]['nc_dict']['A_weight'] = 0.00075  # nmda <- removed this bc law also adjusts
+    #net.connectivity[1]['nc_dict']['A_weight'] = 0.00075  # ampa
+
+    # Modify L2_pyramidal -> L5_pyramidal excitation
+    #net.connectivity[8]['nc_dict']['A_weight'] = 0.0005  # proximal
+    #net.connectivity[9]['nc_dict']['A_weight'] = 0.0005  # distal
+
+    # Modify L5_pyramidal -> L5_pyramidal excitation
+    #net.connectivity[2]['nc_dict']['A_weight'] = 0.00075  # nmda <- removed this bc law also adjusts
+    #net.connectivity[3]['nc_dict']['A_weight'] = 0.00075  # ampa
+
+    # Modify L5_basket -> L5_pyramidal inhibition
+    #net.connectivity[7]['nc_dict']['A_weight'] = 0.075  # gabab <- removed this bc law also adjusts gabab
+
+    # LAW MODEL-following CHANGES start here
+    # Update biophysics (increase gabab duration of inhibition)
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau2'] = 200.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'] = 200.0
+
+    # Decrease L5_pyramidal -> L5_pyramidal nmda weight (both .0005 by default)
+    net.connectivity[0]['nc_dict']['A_weight'] = 0.00005
+    net.connectivity[2]['nc_dict']['A_weight'] = 0.0001
+    
+    # Modify L5_basket -> L5_pyramidal inhibition, default .025
+    net.connectivity[7]['nc_dict']['A_weight'] = 0.15  # gabab
+
+    # l2 basket -> l2 pyr is .05 by default
+    net.connectivity[5]['nc_dict']['A_weight'] = 0.15  # gabab
+
+    # Remove L5 pyramidal somatic and basal dendrite calcium channels
+    #for sec in ['soma', 'basal_1', 'basal_2', 'basal_3']:
+    #    del net.cell_types['L5_pyramidal'].sections[
+    #        sec].mechs['ca']
+    
+    # Remove L2_basket -> L5_pyramidal gabaa connection
+    del net.connectivity[10]  # Original paper simply sets gbar to 0.0
+
+    # Add L2_basket -> L5_pyramidal gabab connection
+    # in this setup, a separate population of cells we'll turn off 
+    # after the beta event ends
+    delay = net.delay
+    src_cell = 'L2GABAb_basket'
+    target_cell = 'L5_pyramidal'
+    lamtha = 50.
+    weight = .11 #0.0002 in Law
+    loc = 'distal'
+    receptor = 'gabab'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
+    # Add L5_basket -> L5_pyramidal distal connection
+    # ("Martinotti-like recurrent tuft connection")
+    #src_cell = 'L5_basket'
+    #target_cell = 'L5_pyramidal'
+    #lamtha = 70.
+    #loc = 'distal'
+    #receptor = 'gabaa'
+    #key = f'gbar_L5Basket_L5Pyr_{receptor}'
+    #weight = net._params[key]
+    #net.add_connection(
+    #    src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+
+    return net
+    
+    
 def add_erp_drives_to_jones_model(net, tstart=0.0):
     """Add drives necessary for an event related potential (ERP)
 

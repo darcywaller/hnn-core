@@ -110,16 +110,18 @@ def read_params(params_fname, file_contents=None):
 
 
 def _long_name(short_name):
-    long_name = dict(L2Basket='L2_basket', L5Basket='L5_basket',
-                     L2Pyr='L2_pyramidal', L5Pyr='L5_pyramidal')
+    long_name = dict(L2Basket='L2_basket', L2GABAbBasket='L2GABAb_basket',
+                     L5Basket='L5_basket', L2Pyr='L2_pyramidal',
+                     L5Pyr='L5_pyramidal')
     if short_name in long_name:
         return long_name[short_name]
     return short_name
 
 
 def _short_name(short_name):
-    long_name = dict(L2_basket='L2Basket', L5_basket='L5Basket',
-                     L2_pyramidal='L2Pyr', L5_pyramidal='L5Pyr')
+    long_name = dict(L2_basket='L2Basket', L2GABAb_basket='L2GABAbBasket',
+                     L5_basket='L5Basket', L2_pyramidal='L2Pyr',
+                     L5_pyramidal='L5Pyr')
     if short_name in long_name:
         return long_name[short_name]
     return short_name
@@ -421,9 +423,9 @@ def check_evoked_synkeys(p, nprox, ndist):
     # make sure ampa,nmda gbar values are in the param dict for evoked
     # inputs(for backwards compatibility)
     # evoked distal target cell types
-    lctprox = ['L2Pyr', 'L5Pyr', 'L2Basket', 'L5Basket']
+    lctprox = ['L2Pyr', 'L5Pyr', 'L2Basket', 'L2GABAbBasket', 'L5Basket']
     # evoked proximal target cell types
-    lctdist = ['L2Pyr', 'L5Pyr', 'L2Basket']
+    lctdist = ['L2Pyr', 'L5Pyr', 'L2GABAbBasket','L2Basket']
     lsy = ['ampa', 'nmda']  # synapse types used in evoked inputs
     for nev, pref, lct in zip([nprox, ndist], ['evprox_', 'evdist_'],
                               [lctprox, lctdist]):
@@ -490,6 +492,10 @@ def create_pext(p, tstop):
                           p['input_prox_A_delay_L2']),
         'L2Basket_nmda': (p['input_prox_A_weight_L2Basket_nmda'],
                           p['input_prox_A_delay_L2']),
+        'L2GABAbBasket_ampa': (p['input_prox_A_weight_L2GABAbBasket_ampa'],
+                          p['input_prox_A_delay_L2']),
+        'L2GABAbBasket_nmda': (p['input_prox_A_weight_L2GABAbBasket_nmda'],
+                          p['input_prox_A_delay_L2']),
         'L5Basket_ampa': (p['input_prox_A_weight_L5Basket_ampa'],
                           p['input_prox_A_delay_L5']),
         'L5Basket_nmda': (p['input_prox_A_weight_L5Basket_nmda'],
@@ -523,6 +529,10 @@ def create_pext(p, tstop):
         'L2Basket_ampa': (p['input_dist_A_weight_L2Basket_ampa'],
                           p['input_dist_A_delay_L2']),
         'L2Basket_nmda': (p['input_dist_A_weight_L2Basket_nmda'],
+                          p['input_dist_A_delay_L2']),
+        'L2GABAbBasket_ampa': (p['input_dist_A_weight_L2GABAbBasket_ampa'],
+                          p['input_dist_A_delay_L2']),
+        'L2GABAbBasket_nmda': (p['input_dist_A_weight_L2GABAbBasket_nmda'],
                           p['input_dist_A_delay_L2']),
         'events_per_cycle': p['events_per_cycle_dist'],
         'prng_seedcore': int(p['prng_seedcore_input_dist']),
@@ -560,6 +570,9 @@ def create_pext(p, tstop):
             'L2_basket': (p['gbar_' + skey + '_L2Basket_ampa'],
                           p['gbar_' + skey + '_L2Basket_nmda'],
                           0.1, p['sigma_t_' + skey]),
+            'L2GABAb_basket': (p['gbar_' + skey + '_L2GABAbBasket_ampa'],
+                          p['gbar_' + skey + '_L2GABAbBasket_nmda'],
+                          0.1, p['sigma_t_' + skey]),
             'L5_pyramidal': (p['gbar_' + skey + '_L5Pyr_ampa'],
                              p['gbar_' + skey + '_L5Pyr_nmda'],
                              1., p['sigma_t_' + skey]),
@@ -589,6 +602,9 @@ def create_pext(p, tstop):
             'L2_basket': (p['gbar_' + skey + '_L2Basket_ampa'],
                           p['gbar_' + skey + '_L2Basket_nmda'],
                           0.1, p['sigma_t_' + skey]),
+            'L2GABAb_basket': (p['gbar_' + skey + '_L2GABAbBasket_ampa'],
+                          p['gbar_' + skey + '_L2GABAbBasket_nmda'],
+                          0.1, p['sigma_t_' + skey]),
             'prng_seedcore': int(p['prng_seedcore_' + skey]),
             'lamtha': 3.,
             'loc': 'distal',
@@ -607,6 +623,10 @@ def create_pext(p, tstop):
                       p['L2Basket_Gauss_A_weight'],
                       1., p['L2Basket_Gauss_mu'],
                       p['L2Basket_Gauss_sigma']),
+        'L2GABAb_basket': (p['L2GABAbBasket_Gauss_A_weight'],
+                      p['L2GABAbBasket_Gauss_A_weight'],
+                      1., p['L2GABAbBasket_Gauss_mu'],
+                      p['L2GABAbBasket_Gauss_sigma']),
         'L2_pyramidal': (p['L2Pyr_Gauss_A_weight'],
                          p['L2Pyr_Gauss_A_weight'],
                          0.1, p['L2Pyr_Gauss_mu'], p['L2Pyr_Gauss_sigma']),
@@ -631,6 +651,9 @@ def create_pext(p, tstop):
         'L2_basket': (p['L2Basket_Pois_A_weight_ampa'],
                       p['L2Basket_Pois_A_weight_nmda'],
                       1., p['L2Basket_Pois_lamtha']),
+        'L2GABAb_basket': (p['L2GABAbBasket_Pois_A_weight_ampa'],
+                      p['L2GABAbBasket_Pois_A_weight_nmda'],
+                      1., p['L2GABAbBasket_Pois_lamtha']),
         'L2_pyramidal': (p['L2Pyr_Pois_A_weight_ampa'],
                          p['L2Pyr_Pois_A_weight_nmda'],
                          0.1, p['L2Pyr_Pois_lamtha']),
@@ -662,80 +685,9 @@ def compare_dictionaries(d1, d2):
     return d1
 
 
-def _any_positive_weights(drive):
-    """ Checks a drive for any positive weights. """
-    weights = (list(drive['weights_ampa'].values()) +
-               list(drive['weights_nmda'].values()))
-    if any([val > 0 for val in weights]):
-        return True
-    else:
-        return False
-
-
-def remove_nulled_drives(net):
-    """Removes drives from network if they have been given null parameters.
-
-    Legacy param files contained parameter placeholders for non-functional
-    drives. These drives were nulled by assigning values outside typical
-    ranges. This function removes drives on the following conditions:
-        1. Start time is larger than stop time
-        2. All weights are non-positive
-
-    Parameters
-    ----------
-    net : Network object
-
-    Returns
-    -------
-    net : Network object
-
-    """
-    from .network import pick_connection
-
-    net = deepcopy(net)
-    drives_copy = net.external_drives.copy()
-
-    extras = dict()
-    for drive_name, drive in net.external_drives.items():
-        conn_indices = pick_connection(net, src_gids=drive_name)
-
-        space_constant = net.connectivity[conn_indices[0]]['nc_dict']['lamtha']
-        probability = net.connectivity[conn_indices[0]]['probability']
-
-        extras[drive_name] = {'space_constant': space_constant,
-                              'probability': probability}
-
-    net.clear_drives()
-    for drive_name, drive in drives_copy.items():
-        # Do not add drive if tstart is > tstop, or negative
-        t_start = drive['dynamics'].get('tstart')
-        t_stop = drive['dynamics'].get('tstop')
-        if (t_start is not None and t_stop is not None and
-                ((t_start > t_stop) or
-                 (t_start < 0) or
-                 (t_stop < 0))):
-            continue
-        # Do not add if all 0 weights
-        elif not _any_positive_weights(drive):
-            continue
-        else:
-            # Set n_drive_cells to 'n_cells' if equal to max number of cells
-            if drive['cell_specific']:
-                drive['n_drive_cells'] = 'n_cells'
-            net._attach_drive(drive['name'], drive, drive['weights_ampa'],
-                              drive['weights_nmda'], drive['location'],
-                              extras[drive_name]['space_constant'],
-                              drive['synaptic_delays'],
-                              drive['n_drive_cells'], drive['cell_specific'],
-                              extras[drive_name]['probability'])
-    return net
-
-
-def convert_to_json(params_fname,
-                    out_fname,
-                    include_drives=True,
-                    overwrite=True):
-    """Converts legacy json or param format to hierarchical json format
+def convert_to_hdf5(params_fname, out_fname, include_drives=True,
+                    overwrite=True, write_output=False):
+    """Converts json or param format to hdf5
 
     Parameters
     ----------
@@ -747,12 +699,13 @@ def convert_to_json(params_fname,
         Include drives from params file
     overwrite: bool, default=True
         Overwrite file
+    write_output: bool, default=False
+        Write out simulations
     Returns
     -------
     None
     """
-    from .network_models import jones_2009_model
-
+    from .network import Network
     # Validate inputs
     _validate_type(params_fname, (str, Path), 'params_fname')
     _validate_type(out_fname, (str, Path), 'out_fname')
@@ -762,21 +715,17 @@ def convert_to_json(params_fname,
     params_suffix = params_fname.suffix.lower().split('.')[-1]
 
     # Add suffix if not supplied
-    if out_fname.suffix != '.json':
-        out_fname = out_fname.with_suffix('.json')
+    if out_fname.suffix != '.hdf5':
+        out_fname = out_fname.with_suffix('.hdf5')
 
-    net = jones_2009_model(params=read_params(params_fname),
-                           add_drives_from_params=include_drives,
-                           legacy_mode=(True if params_suffix == 'param'
-                                        else False),
-                           )
-
-    # Remove drives that have null attributes
-    net = remove_nulled_drives(net)
-
-    net.write_configuration(fname=out_fname,
-                            overwrite=overwrite,
-                            )
+    net = Network(params=read_params(params_fname),
+                  add_drives_from_params=include_drives,
+                  legacy_mode=True if params_suffix == 'param' else False,
+                  )
+    net.write(fname=out_fname,
+              overwrite=overwrite,
+              write_output=write_output,
+              )
     return
 
 
