@@ -38,13 +38,9 @@ def _get_target_properties(weights_ampa, weights_nmda, synaptic_delays,
     # Distal drives should not target L5 basket cells according to the
     # canonical Jones model
     if location == 'distal' and 'L5_basket' in target_populations:
-        raise ValueError('Due to physiological/anatomical constraints, '
-                         'a distal drive cannot target L5_basket cell types. '
-                         'L5_basket cell types must remain undefined by '
-                         'the user in all synaptic weights dictionaries '
-                         'for this drive. '
-                         'Therefore, please remove the L5_basket entries '
-                         'from the corresponding dictionaries.')
+        raise ValueError('When adding a distal drive, synaptic weight cannot '
+                         'be defined for the L5_basket cell type as this '
+                         'connection does not exist.')
 
     if isinstance(synaptic_delays, float):
         delays_by_type = {cell_type: synaptic_delays for cell_type in
@@ -188,18 +184,12 @@ def _add_drives_from_params(net):
                 event_seed=specs['event_seed'])
 
     # add tonic biases if present in params
-    if bias_specs['tonic']:
-        _cell_types_amplitudes = dict()
-        for cellname in bias_specs['tonic']:
-            _cell_types_amplitudes[cellname] = (
-                bias_specs['tonic'][cellname]['amplitude'])
-
-        _t0 = bias_specs['tonic'][cellname]['t0']
-        _tstop = bias_specs['tonic'][cellname]['tstop']
+    for cellname in bias_specs['tonic']:
         net.add_tonic_bias(
-            amplitude=_cell_types_amplitudes,
-            t0=_t0,
-            tstop=_tstop)
+            cell_type=cellname,
+            amplitude=bias_specs['tonic'][cellname]['amplitude'],
+            t0=bias_specs['tonic'][cellname]['t0'],
+            tstop=bias_specs['tonic'][cellname]['tstop'])
 
     # in HNN-GUI, seed is determined by "absolute GID" instead of the
     # gid offset with respect to the first cell of a population.
@@ -231,8 +221,7 @@ def _get_prng(seed, gid):
 
 
 def _drive_cell_event_times(drive_type, dynamics, tstop, target_type='any',
-                            trial_idx=0, drive_cell_gid=0, event_seed=0,
-                            trial_seed_offset=0):
+                            trial_idx=0, drive_cell_gid=0, event_seed=0):
     """Generate event times for one artificial drive cell based on dynamics.
 
     Parameters
@@ -257,15 +246,13 @@ def _drive_cell_event_times(drive_type, dynamics, tstop, target_type='any',
         Optional gid of current artificial cell (used for seeding)
     event_seed : int
         Optional initial seed for random number generator.
-    trial_seed_offset : int
-        Seed is incremented by this amount for each trial.
 
     Returns
     -------
     event_times : list
         The event times at which spikes occur.
     """
-    prng, prng2 = _get_prng(seed=event_seed + trial_idx * trial_seed_offset,
+    prng, prng2 = _get_prng(seed=event_seed + trial_idx,
                             gid=drive_cell_gid)
 
     # check drive name validity, allowing substring matches
@@ -277,7 +264,7 @@ def _drive_cell_event_times(drive_type, dynamics, tstop, target_type='any',
     elif len(matches) > 1:
         raise ValueError('Ambiguous external drive: %s' % drive_type)
 
-    event_times = np.array([])
+    event_times = list()
     if drive_type == 'poisson':
         if target_type == 'any':
             rate_constant = dynamics['rate_constant']
@@ -312,10 +299,11 @@ def _drive_cell_event_times(drive_type, dynamics, tstop, target_type='any',
     # brute force remove non-zero times. Might result in fewer vals
     # than desired
     # values MUST be sorted for VecStim()!
-    event_times = event_times[np.logical_and(event_times > 0,
-                                             event_times <= tstop)]
-    event_times.sort()
-    event_times = event_times.tolist()
+    if len(event_times) > 0:
+        event_times = event_times[np.logical_and(event_times > 0,
+                                                 event_times <= tstop)]
+        event_times.sort()
+        event_times = event_times.tolist()
 
     return event_times
 

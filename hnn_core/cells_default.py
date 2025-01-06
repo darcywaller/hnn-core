@@ -95,22 +95,19 @@ def _cell_L2Pyr(override_params, pos=(0., 0., 0), gid=0.):
 
         section.mechs = p_mech[sec_name]
 
-    # Node description - (section_name, end_point)
-    cell_tree = {
-        ('apical_trunk', 0): [('apical_trunk', 1)],
-        ('apical_1', 0): [('apical_1', 1)],
-        ('apical_tuft', 0): [('apical_tuft', 1)],
-        ('apical_oblique', 0): [('apical_oblique', 1)],
-        ('basal_1', 0): [('basal_1', 1)],
-        ('basal_2', 0): [('basal_2', 1)],
-        ('basal_3', 0): [('basal_3', 1)],
-        # Different sections connected
-        ('soma', 0): [('soma', 1), ('basal_1', 0)],
-        ('soma', 1): [('apical_trunk', 0)],
-        ('apical_trunk', 1): [('apical_1', 0), ('apical_oblique', 0)],
-        ('apical_1', 1): [('apical_tuft', 0)],
-        ('basal_1', 1): [('basal_2', 0), ('basal_3', 0)]
-    }
+    # parent, parent_end, child, {child_start=0}
+    topology = [
+        # Distal (Apical)
+        ['soma', 1, 'apical_trunk', 0],
+        ['apical_trunk', 1, 'apical_1', 0],
+        ['apical_1', 1, 'apical_tuft', 0],
+        # apical_oblique comes off distal end of apical_trunk
+        ['apical_trunk', 1, 'apical_oblique', 0],
+        # Proximal (basal)
+        ['soma', 0, 'basal_1', 0],
+        ['basal_1', 1, 'basal_2', 0],
+        ['basal_1', 1, 'basal_3', 0]
+    ]
 
     sect_loc = {'proximal': ['apical_oblique', 'basal_2', 'basal_3'],
                 'distal': ['apical_tuft']}
@@ -119,8 +116,8 @@ def _cell_L2Pyr(override_params, pos=(0., 0., 0), gid=0.):
     return Cell('L2Pyr', pos,
                 sections=sections,
                 synapses=synapses,
+                topology=topology,
                 sect_loc=sect_loc,
-                cell_tree=cell_tree,
                 gid=gid)
 
 
@@ -181,23 +178,19 @@ def _cell_L5Pyr(override_params, pos=(0., 0., 0), gid=0.):
                 partial(_exp_g_at_dist, zero_val=1e-6,
                         exp_term=3e-3, offset=0.0)
 
-    cell_tree = {
-        ('apical_trunk', 0): [('apical_trunk', 1)],
-        ('apical_1', 0): [('apical_1', 1)],
-        ('apical_2', 0): [('apical_2', 1)],
-        ('apical_tuft', 0): [('apical_tuft', 1)],
-        ('apical_oblique', 0): [('apical_oblique', 1)],
-        ('basal_1', 0): [('basal_1', 1)],
-        ('basal_2', 0): [('basal_2', 1)],
-        ('basal_3', 0): [('basal_3', 1)],
-        # Different sections connected
-        ('soma', 0): [('soma', 1), ('basal_1', 0)],
-        ('soma', 1): [('apical_trunk', 0)],
-        ('apical_trunk', 1): [('apical_1', 0), ('apical_oblique', 0)],
-        ('apical_1', 1): [('apical_2', 0)],
-        ('apical_2', 1): [('apical_tuft', 0)],
-        ('basal_1', 1): [('basal_2', 0), ('basal_3', 0)]
-    }
+    topology = [
+        # Distal (Apical)
+        ['soma', 1, 'apical_trunk', 0],
+        ['apical_trunk', 1, 'apical_1', 0],
+        ['apical_1', 1, 'apical_2', 0],
+        ['apical_2', 1, 'apical_tuft', 0],
+        # apical_oblique comes off distal end of apical_trunk
+        ['apical_trunk', 1, 'apical_oblique', 0],
+        # Proximal (basal)
+        ['soma', 0, 'basal_1', 0],
+        ['basal_1', 1, 'basal_2', 0],
+        ['basal_1', 1, 'basal_3', 0]
+    ]
 
     sect_loc = {'proximal': ['apical_oblique', 'basal_2', 'basal_3'],
                 'distal': ['apical_tuft']}
@@ -206,8 +199,8 @@ def _cell_L5Pyr(override_params, pos=(0., 0., 0), gid=0.):
     return Cell('L5Pyr', pos,
                 sections=sections,
                 synapses=synapses,
+                topology=topology,
                 sect_loc=sect_loc,
-                cell_tree=cell_tree,
                 gid=gid)
 
 
@@ -312,7 +305,7 @@ def _exp_g_at_dist(x, zero_val, exp_term, offset):
     zero_val : float | int
         Value of function when x = 0
     exp_term : float | int
-        Multiplier of x in the exponent
+        Mutiplier of x in the exponent
     offset: float |int
         Offset value added to output
 
@@ -342,6 +335,8 @@ def basket(cell_name, pos=(0, 0, 0), gid=None):
     """
     if cell_name == 'L2Basket':
         sect_loc = dict(proximal=['soma'], distal=['soma'])
+    elif cell_name == 'L2GABAbBasket':
+        sect_loc = dict(proximal=['soma'], distal=['soma'])
     elif cell_name == 'L5Basket':
         sect_loc = dict(proximal=['soma'], distal=[])
     else:
@@ -353,12 +348,12 @@ def basket(cell_name, pos=(0, 0, 0), gid=None):
     sections['soma'].syns = list(synapses.keys())
     sections['soma'].mechs = {'hh2': dict()}
 
-    cell_tree = None
+    topology = None
     return Cell(cell_name, pos,
                 sections=sections,
                 synapses=synapses,
+                topology=topology,
                 sect_loc=sect_loc,
-                cell_tree=cell_tree,
                 gid=gid)
 
 

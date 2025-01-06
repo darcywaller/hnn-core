@@ -53,7 +53,6 @@ def _gather_trial_data(sim_data, net, n_trials, postproc):
         net.cell_response.update_types(net.gid_ranges)
         net.cell_response._vsec.append(sim_data[idx]['vsec'])
         net.cell_response._isec.append(sim_data[idx]['isec'])
-        net.cell_response._ca.append(sim_data[idx]['ca'])
 
         # extracellular array
         for arr_name, arr in net.rec_arrays.items():
@@ -65,8 +64,8 @@ def _gather_trial_data(sim_data, net, n_trials, postproc):
         dpl = Dipole(times=sim_data[idx]['times'],
                      data=sim_data[idx]['dpl_data'])
 
-        N_pyr_x = net._N_pyr_x
-        N_pyr_y = net._N_pyr_y
+        N_pyr_x = net._params['N_pyr_x']
+        N_pyr_y = net._params['N_pyr_y']
         dpl._baseline_renormalize(N_pyr_x, N_pyr_y)  # XXX cf. #270
         dpl._convert_fAm_to_nAm()  # always applied, cf. #264
         if postproc:
@@ -84,8 +83,7 @@ def _gather_trial_data(sim_data, net, n_trials, postproc):
 def _get_mpi_env():
     """Set some MPI environment variables."""
     my_env = os.environ.copy()
-    # For Linux systems
-    if sys.platform != 'win32':
+    if 'win' not in sys.platform:
         my_env["OMPI_MCA_btl_base_warn_component_unused"] = '0'
 
     if 'darwin' in sys.platform:
@@ -114,7 +112,7 @@ def run_subprocess(command, obj, timeout, proc_queue=None, *args, **kwargs):
     """
     proc_data_bytes = b''
     # each loop while waiting will involve two Queue.get() timeouts, each
-    # 0.01s. This calculation will error on the side of a longer timeout
+    # 0.01s. This caclulation will error on the side of a longer timeout
     # than is specified because more is done each loop that just Queue.get()
     timeout_cycles = timeout / 0.02
 
@@ -649,7 +647,10 @@ class MPIBackend(object):
                          'mpi_child.py')
 
         # Split the command into shell arguments for passing to Popen
-        use_posix = True if sys.platform != 'win32' else False
+        if 'win' in sys.platform:
+            use_posix = True
+        else:
+            use_posix = False
         self.mpi_cmd = shlex.split(self.mpi_cmd, posix=use_posix)
 
     def __enter__(self):
@@ -694,7 +695,7 @@ class MPIBackend(object):
 
         # just use the joblib backend for a single core
         if self.n_procs == 1:
-            print("MPIBackend is set to use 1 core: transferring the "
+            print("MPIBackend is set to use 1 core: tranferring the "
                   "simulation to JoblibBackend....")
             return JoblibBackend(n_jobs=1).simulate(net, tstop=tstop,
                                                     dt=dt,

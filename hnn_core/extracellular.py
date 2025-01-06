@@ -90,7 +90,7 @@ def _get_laminar_z_coords(electrode_positions):
         raise ValueError(
             'Electrode contacts are incompatible with laminar profiling '
             'in a neocortical column. Make sure the '
-            'electrode positions are equispaced, colinear, and projecting '
+            'electrode postions are equispaced, colinear, and projecting '
             'along the z-axis.')
     else:
         return np.array(electrode_positions)[:, 2], z_delta
@@ -354,28 +354,6 @@ class ExtracellularArray:
     def __len__(self):
         return len(self._data)  # length == number of trials
 
-    def __eq__(self, other):
-        if not isinstance(other, ExtracellularArray):
-            return NotImplemented
-
-        all_attrs = dir(self)
-        attrs_to_ignore = [x for x in all_attrs if x.startswith('_')]
-        attrs_to_ignore.extend(['conductivity', 'copy', 'n_contacts',
-                                'plot_csd', 'plot_lfp', 'sfreq', 'smooth',
-                                'voltages', 'to_dict', 'times', 'voltages'])
-        attrs_to_check = [x for x in all_attrs if x not in attrs_to_ignore]
-
-        # Check all other attributes
-        for attr in attrs_to_check:
-            if getattr(self, attr) != getattr(other, attr):
-                return False
-
-        if not ((self.times == other.times).all() and
-                (self.voltages == other.voltages).all()):
-            return False
-
-        return True
-
     def copy(self):
         """Return a copy of the ExtracellularArray instance
 
@@ -457,6 +435,11 @@ class ExtracellularArray:
             Trial number(s) to plot
         contact_no : int | list of int | slice
             Electrode contact number(s) to plot
+        tmin : float | None
+            Start time of plot in milliseconds. If None, plot entire
+            simulation.
+        tmax : float | None
+            End time of plot in milliseconds. If None, plot entire simulation.
         ax : instance of matplotlib figure | None
             The matplotlib axis
         decim : int | list of int | None (default)
@@ -511,24 +494,11 @@ class ExtracellularArray:
                 show=show)
         return fig
 
-    def plot_csd(self, vmin=None, vmax=None, interpolation='spline',
-                 sink='b', colorbar=True, ax=None, show=True):
+    def plot_csd(self, colorbar=True, ax=None, show=True):
         """Plot laminar current source density (CSD) estimation
 
         Parameters
         ----------
-        vmin: float, optional
-            lower bound of the color axis.
-            Will be set automatically of None.
-        vmax: float, optional
-            upper bound of the color axis.
-            Will be set automatically of None.
-        sink : str
-            If set to 'blue' or 'b', plots sinks in blue and sources in red,
-            if set to 'red' or 'r', sinks plotted in red and sources blue.
-        interpolation : str | None
-            If 'spline', will smoothen the CSD using spline method,
-            if None, no smoothing will be applied.
         colorbar : bool
             If the colorbar is presented.
         ax : instance of matplotlib figure | None
@@ -550,29 +520,9 @@ class ExtracellularArray:
 
         fig = plot_laminar_csd(self.times, csd_data,
                                contact_labels=contact_labels, ax=ax,
-                               colorbar=colorbar, vmin=vmin, vmax=vmax,
-                               interpolation=interpolation, sink=sink,
-                               show=show)
+                               colorbar=colorbar, show=show)
 
         return fig
-
-    def to_dict(self):
-        """Converts an object of ExtracellularArray class to a
-        dictionary.
-
-        Returns
-        -------
-        dictionary form of an object of ExtracellularArray class.
-        """
-        rec_array_data = dict()
-        rec_array_data['positions'] = self.positions
-        rec_array_data['conductivity'] = self.conductivity
-        rec_array_data['method'] = self.method
-        rec_array_data['min_distance'] = self.min_distance
-        rec_array_data['times'] = self.times
-        rec_array_data['voltages'] = self.voltages
-
-        return rec_array_data
 
 
 class _ExtracellularArrayBuilder(object):

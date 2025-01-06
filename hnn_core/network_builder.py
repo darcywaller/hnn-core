@@ -69,9 +69,25 @@ def _simulate_single_trial(net, tstop, dt, trial_idx):
     def simulation_time():
         print(f'Trial {trial_idx + 1}: {round(h.t, 2)} ms...')
 
+    def update_gabab():
+        # set all L2GABAb -> L5 pyr connections to 0 when called
+        for nc in neuron_net.ncs['L2GABAbBasket_L5Pyr_gabab']:
+            nc.weight[0] = 0
+            
     if rank == 0:
         for tt in range(0, int(h.tstop), 10):
             _CVODE.event(tt, simulation_time)
+
+        if 'bursty' in [net.external_drives[ikey]['type'] for ikey in net.external_drives.keys()]:
+            beta_tau2 = int(net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'])
+            final_drive = int(net.external_drives['betadist1']['dynamics']['tstart'])
+            update_time = final_drive+beta_tau2; 
+            # 200ms into simulation
+            _CVODE.event(update_time,update_gabab)
+        else:
+            # immediately - 1 ms into sim
+            update_time = 1
+            _CVODE.event(update_time,update_gabab)
 
     h.fcurrent()
 
@@ -100,13 +116,6 @@ def _simulate_single_trial(net, tstop, dt, trial_idx):
             isec_py[gid][sec_name] = {
                 key: isec.to_python() for key, isec in isec.items()}
 
-    ca_py = dict()
-    for gid, ca_dict in neuron_net._ca.items():
-        ca_py[gid] = dict()
-        for sec_name, ca in ca_dict.items():
-            if ca is not None:
-                ca_py[gid][sec_name] = ca.to_python()
-
     dpl_data = np.c_[
         neuron_net._nrn_dipoles['L2_pyramidal'].as_numpy() +
         neuron_net._nrn_dipoles['L5_pyramidal'].as_numpy(),
@@ -126,7 +135,6 @@ def _simulate_single_trial(net, tstop, dt, trial_idx):
             'gid_ranges': net.gid_ranges,
             'vsec': vsec_py,
             'isec': isec_py,
-            'ca': ca_py,
             'rec_data': rec_arr_py,
             'rec_times': rec_times_py,
             'times': times.to_python()}
@@ -290,7 +298,7 @@ class NetworkBuilder(object):
         self._cells = list()
 
         # artificial cells must be appended to a list in order to preserve
-        # the NEURON hoc objects and the corresponding python references
+        # the NEURON hoc objects and the corresonding python references
         # initialized by _ArtificialCell()
         self._drive_cells = list()
 
@@ -299,7 +307,6 @@ class NetworkBuilder(object):
 
         self._vsec = dict()
         self._isec = dict()
-        self._ca = dict()
         self._nrn_rec_arrays = dict()
         self._nrn_rec_callbacks = list()
 
@@ -336,11 +343,9 @@ class NetworkBuilder(object):
 
         record_vsec = self.net._params['record_vsec']
         record_isec = self.net._params['record_isec']
-        record_ca = self.net._params['record_ca']
         self._create_cells_and_drives(threshold=self.net._params['threshold'],
                                       record_vsec=record_vsec,
-                                      record_isec=record_isec,
-                                      record_ca=record_ca)
+                                      record_isec=record_isec)
 
         self.state_init()
 
@@ -388,15 +393,15 @@ class NetworkBuilder(object):
                 # assigned to this rank
                 for src_gid in self.net.gid_ranges[drive['name']]:
                     conn_idxs = pick_connection(self.net, src_gids=src_gid)
-                    target_gids = set()
+                    target_gids = list()
                     for conn_idx in conn_idxs:
                         gid_pairs = self.net.connectivity[
                             conn_idx]['gid_pairs']
                         if src_gid in gid_pairs:
-                            target_gids.update(self.net.connectivity[conn_idx]
-                                               ['gid_pairs'][src_gid])
+                            target_gids += (self.net.connectivity[conn_idx]
+                                            ['gid_pairs'][src_gid])
 
-                    for target_gid in target_gids:
+                    for target_gid in set(target_gids):
                         if (target_gid in self._gid_list and
                                 src_gid not in self._gid_list):
                             self._gid_list.append(src_gid)
@@ -410,7 +415,7 @@ class NetworkBuilder(object):
         self._gid_list.sort()
 
     def _create_cells_and_drives(self, threshold, record_vsec=False,
-                                 record_isec=False, record_ca=False):
+                                 record_isec=False):
         """Parallel create cells AND external drives
 
         NB: _Cell.__init__ calls h.Section -> non-picklable!
@@ -445,7 +450,7 @@ class NetworkBuilder(object):
                         src_type in self.net.external_biases['tonic']):
                     cell.create_tonic_bias(**self.net.external_biases
                                            ['tonic'][src_type])
-                cell.record(record_vsec, record_isec, record_ca)
+                cell.record(record_vsec, record_isec)
 
                 # this call could belong in init of a _Cell (with threshold)?
                 nrn_netcon = cell.setup_source_netcon(threshold)
@@ -477,7 +482,6 @@ class NetworkBuilder(object):
         for conn in connectivity:
             loc, receptor = conn['loc'], conn['receptor']
             nc_dict = deepcopy(conn['nc_dict'])
-            nc_dict['A_weight'] *= nc_dict['gain']
             # Gather indices of targets on current node
             valid_targets = set()
             for src_gid, target_gids in conn['gid_pairs'].items():
@@ -576,7 +580,6 @@ class NetworkBuilder(object):
 
             self._vsec[cell.gid] = cell.vsec
             self._isec[cell.gid] = cell.isec
-            self._ca[cell.gid] = cell.ca
 
         # reduce across threads
         for nrn_dpl in self._nrn_dipoles.values():
@@ -587,7 +590,6 @@ class NetworkBuilder(object):
         # aggregate the currents and voltages independently on each proc
         vsec_list = _PC.py_gather(self._vsec, 0)
         isec_list = _PC.py_gather(self._isec, 0)
-        ca_list = _PC.py_gather(self._ca, 0)
 
         # combine spiking data from each proc
         spike_times_list = _PC.py_gather(self._spike_times, 0)
@@ -603,8 +605,6 @@ class NetworkBuilder(object):
                 self._vsec.update(vsec)
             for isec in isec_list:
                 self._isec.update(isec)
-            for ca in ca_list:
-                self._ca.update(ca)
 
         _PC.barrier()  # get all nodes to this place before continuing
 
@@ -628,6 +628,8 @@ class NetworkBuilder(object):
                         else:
                             seg.v = -72.
                     elif cell.name == 'L2Basket':
+                        seg.v = -64.9737
+                    elif cell.name == 'L2GABAbBasket':
                         seg.v = -64.9737
                     elif cell.name == 'L5Basket':
                         seg.v = -64.9737

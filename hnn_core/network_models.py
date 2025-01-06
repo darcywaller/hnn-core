@@ -12,7 +12,7 @@ from .externals.mne import _validate_type
 
 
 def jones_2009_model(params=None, add_drives_from_params=False,
-                     legacy_mode=False, mesh_shape=(10, 10)):
+                     legacy_mode=False):
     """Instantiate the network model described in
     Jones et al. J. of Neurophys. 2009 [1]_
 
@@ -29,8 +29,6 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     legacy_mode : bool
         Set to False by default. Enables matching HNN GUI output when drives
         are added suitably. Will be deprecated in a future release.
-    mesh_shape : tuple of int (default: (10, 10))
-        Defines the (n_x, n_y) shape of the grid of pyramidal cells.
 
     Returns
     -------
@@ -61,7 +59,7 @@ def jones_2009_model(params=None, add_drives_from_params=False,
         params = read_params(params)
 
     net = Network(params, add_drives_from_params=add_drives_from_params,
-                  legacy_mode=legacy_mode, mesh_shape=mesh_shape)
+                  legacy_mode=legacy_mode)
 
     delay = net.delay
 
@@ -132,7 +130,7 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     receptor = 'ampa'
     net.add_connection(
         src_cell, target_cell, loc, receptor, weight, delay, lamtha)
-
+        
     src_cell = 'L2_basket'
     lamtha = 20.
     key = f'gbar_L2Basket_{_short_name(target_cell)}'
@@ -142,6 +140,18 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     net.add_connection(
         src_cell, target_cell, loc, receptor, weight, delay, lamtha)
 
+    # xx -> layer2GABAb Basket
+    src_cell = 'L2_pyramidal'
+    target_cell = 'L2GABAb_basket'
+    surrogate_cell = 'L2_basket' # borrow default weight
+    lamtha = 3.
+    key = f'gbar_L2Pyr_{_short_name(surrogate_cell)}'
+    weight = net._params[key]
+    loc = 'soma'
+    receptor = 'ampa'
+    net.add_connection(
+        src_cell, target_cell, loc, receptor, weight, delay, lamtha)
+        
     # xx -> layer5 Basket
     src_cell = 'L5_basket'
     target_cell = 'L5_basket'
@@ -176,7 +186,7 @@ def jones_2009_model(params=None, add_drives_from_params=False,
 
 
 def law_2021_model(params=None, add_drives_from_params=False,
-                   legacy_mode=False, mesh_shape=(10, 10)):
+                   legacy_mode=False):
     """Instantiate the expansion of Jones 2009 model to study beta
     modulated ERPs as described in
     Law et al. Cereb. Cortex 2021 [1]_
@@ -210,8 +220,7 @@ def law_2021_model(params=None, add_drives_from_params=False,
            Perception." Cerebral Cortex, 32, 668–688 (2022).
     """
 
-    net = jones_2009_model(params, add_drives_from_params, legacy_mode,
-                           mesh_shape=mesh_shape)
+    net = jones_2009_model(params, add_drives_from_params, legacy_mode)
 
     # Update biophysics (increase gabab duration of inhibition)
     net.cell_types['L2_pyramidal'].synapses['gabab']['tau1'] = 45.0
@@ -220,12 +229,15 @@ def law_2021_model(params=None, add_drives_from_params=False,
     net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'] = 200.0
 
     # Decrease L5_pyramidal -> L5_pyramidal nmda weight
-    net.connectivity[2]['nc_dict']['A_weight'] = 0.0004
+    net.connectivity[0]['nc_dict']['A_weight'] = 0.00013
+    net.connectivity[2]['nc_dict']['A_weight'] = 0.00025
 
     # Modify L5_basket -> L5_pyramidal inhibition
-    net.connectivity[6]['nc_dict']['A_weight'] = 0.02  # gabaa
-    net.connectivity[7]['nc_dict']['A_weight'] = 0.005  # gabab
+    net.connectivity[7]['nc_dict']['A_weight'] = 0.15  # gabab
 
+    # l2 basket -> l2 pyr is .05 by default
+    net.connectivity[5]['nc_dict']['A_weight'] = 0.15  # gabab
+   
     # Remove L5 pyramidal somatic and basal dendrite calcium channels
     for sec in ['soma', 'basal_1', 'basal_2', 'basal_3']:
         del net.cell_types['L5_pyramidal'].sections[
@@ -236,10 +248,10 @@ def law_2021_model(params=None, add_drives_from_params=False,
 
     # Add L2_basket -> L5_pyramidal gabab connection
     delay = net.delay
-    src_cell = 'L2_basket'
+    src_cell = 'L2GABAb_basket'
     target_cell = 'L5_pyramidal'
     lamtha = 50.
-    weight = 0.0002
+    weight = 0.11
     loc = 'distal'
     receptor = 'gabab'
     net.add_connection(
@@ -263,7 +275,7 @@ def law_2021_model(params=None, add_drives_from_params=False,
 # Remove params argument after updating examples
 # (only relevant for Jones 2009 model)
 def calcium_model(params=None, add_drives_from_params=False,
-                  legacy_mode=False, mesh_shape=(10, 10)):
+                  legacy_mode=False):
     """Instantiate the Jones 2009 model with improved calcium dynamics in
     L5 pyramidal neurons. For more details on changes to calcium dynamics
     see Kohl et al. Brain Topragr 2022 [1]_
@@ -271,7 +283,7 @@ def calcium_model(params=None, add_drives_from_params=False,
     Returns
     -------
     net : Instance of Network object
-        Network object used to store the Jones 2009 model with an improved
+        Network object used to store the Jones 2009 model with an impoved
         calcium channel distribution.
 
     See Also
@@ -297,8 +309,7 @@ def calcium_model(params=None, add_drives_from_params=False,
     if params is None:
         params = read_params(params_fname)
 
-    net = jones_2009_model(params, add_drives_from_params, legacy_mode,
-                           mesh_shape=mesh_shape)
+    net = jones_2009_model(params, add_drives_from_params, legacy_mode)
 
     # Replace L5 pyramidal cell template with updated calcium
     cell_name = 'L5_pyramidal'

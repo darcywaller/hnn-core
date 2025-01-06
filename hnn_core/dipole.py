@@ -3,20 +3,16 @@
 # Authors: Mainak Jas <mjas@mgh.harvard.edu>
 #          Sam Neymotin <samnemo@gmail.com>
 
-import os
 import warnings
-from io import StringIO
-
 import numpy as np
 from copy import deepcopy
-from h5io import write_hdf5, read_hdf5
 from .externals.mne import _check_option
 
 from .viz import plot_dipole, plot_psd, plot_tfr_morlet
 
 
 def simulate_dipole(net, tstop, dt=0.025, n_trials=None, record_vsec=False,
-                    record_isec=False, record_ca=False, postproc=False):
+                    record_isec=False, postproc=False):
     """Simulate a dipole given the experiment parameters.
 
     Parameters
@@ -35,11 +31,8 @@ def simulate_dipole(net, tstop, dt=0.025, n_trials=None, record_vsec=False,
         Option to record voltages from all sections ('all'), or just
         the soma ('soma'). Default: False.
     record_isec : 'all' | 'soma' | False
-        Option to record synaptic currents from all sections ('all'), or just
+        Option to record voltages from all sections ('all'), or just
         the soma ('soma'). Default: False.
-    record_ca : 'all' | 'soma' | False
-        Option to record calcium concentration from all sections ('all'),
-        or just the soma ('soma'). Default: False.
     postproc : bool
         If True, smoothing (``dipole_smooth_win``) and scaling
         (``dipole_scalefctr``) values are read from the parameter file, and
@@ -99,14 +92,6 @@ def simulate_dipole(net, tstop, dt=0.025, n_trials=None, record_vsec=False,
 
     net._params['record_isec'] = record_isec
 
-    _check_option('record_ca', record_ca, ['all', 'soma', False])
-
-    net._params['record_ca'] = record_ca
-
-    net._tstop = tstop
-
-    net._dt = dt
-
     if postproc:
         warnings.warn('The postproc-argument is deprecated and will be removed'
                       ' in a future release of hnn-core. Please define '
@@ -117,90 +102,26 @@ def simulate_dipole(net, tstop, dt=0.025, n_trials=None, record_vsec=False,
     return dpls
 
 
-def _read_dipole_txt(fname, extension='.txt'):
-    """Read dipole values from a txt file and create a Dipole instance.
+def read_dipole(fname):
+    """Read dipole values from a file and create a Dipole instance.
 
     Parameters
     ----------
-    fname : str or io.StringIO
-        Full path to the input file (.txt or .csv) or
-        Content of file in memory as a StringIO
+    fname : str
+        Full path to the input file (.txt)
+
     Returns
     -------
     dpl : Dipole
         The instance of Dipole class
     """
-    if extension == '.csv':
-        # read from a csv file ignoring the headers
-        dpl_data = np.genfromtxt(fname, delimiter=',',
-                                 skip_header=1, dtype=float)
-    else:
-        dpl_data = np.loadtxt(fname, dtype=float)
+    dpl_data = np.loadtxt(fname, dtype=float)
     ncols = dpl_data.shape[1]
     if ncols not in (2, 4):
         raise ValueError(
             f'Data are supposed to have 2 or 4 columns while we have {ncols}.')
     dpl = Dipole(dpl_data[:, 0], dpl_data[:, 1:])
     return dpl
-
-
-def _read_dipole_hdf5(fname):
-    """Read dipole values from a hdf5 file and create a Dipole instance.
-
-    Parameters
-    ----------
-    fname : str
-        Full path to the input file (.hdf5)
-
-    Returns
-    -------
-    dpl : Dipole
-        The instance of Dipole class
-    """
-
-    dpl_data = read_hdf5(fname)
-    if 'object_type' not in dpl_data:
-        raise NameError('The given file is not compatible. '
-                        'The file should contain information'
-                        ' about object type to be read.')
-    if dpl_data['object_type'] != 'Dipole':
-        raise ValueError('The object should be of type Dipole. '
-                         'The file contains object of '
-                         'type %s' % (dpl_data['object_type'],))
-    dpl = Dipole(times=dpl_data['times'],
-                 data=dpl_data['data'],
-                 nave=dpl_data['nave'])
-    dpl.sfreq = dpl_data['sfreq']
-    dpl.scale_applied = dpl_data['scale_applied']
-    return dpl
-
-
-def read_dipole(fname):
-    """Read dipole values from a txt or hdf5 file and
-       create a Dipole instance.
-
-    Parameters
-    ----------
-    fname : str | Path object
-        Full path to the input file (.txt or .hdf5)
-
-    Returns
-    -------
-    dpl : Dipole
-        The instance of Dipole class
-    """
-
-    fname = str(fname)
-    if not os.path.exists(fname):
-        raise FileNotFoundError('File not found at path %s.' % (fname,))
-    file_extension = os.path.splitext(fname)[-1]
-    if file_extension == '.txt':
-        return _read_dipole_txt(fname)
-    elif file_extension == '.hdf5':
-        return _read_dipole_hdf5(fname)
-    else:
-        raise NameError('File extension should be either txt or hdf5, but the '
-                        'given extension is %s' % (file_extension,))
 
 
 def average_dipoles(dpls):
@@ -353,16 +274,13 @@ class Dipole(object):
     def __init__(self, times, data, nave=1):  # noqa: D102
         self.times = np.array(times)
 
-        if isinstance(data, dict):
-            self.data = data
-        else:
-            if data.ndim == 1:
-                data = data[:, None]
-            if data.shape[1] == 3:
-                self.data = {'agg': data[:, 0], 'L2': data[:, 1],
-                             'L5': data[:, 2]}
-            elif data.shape[1] == 1:
-                self.data = {'agg': data[:, 0]}
+        if data.ndim == 1:
+            data = data[:, None]
+
+        if data.shape[1] == 3:
+            self.data = {'agg': data[:, 0], 'L2': data[:, 1], 'L5': data[:, 2]}
+        elif data.shape[1] == 1:
+            self.data = {'agg': data[:, 0]}
 
         self.nave = nave
         self.sfreq = 1000. / (times[1] - times[0])  # NB assumes len > 1
@@ -485,6 +403,10 @@ class Dipole(object):
 
         Parameters
         ----------
+        tmin : float or None
+            Start time of plot (in ms). If None, plot entire simulation.
+        tmax : float or None
+            End time of plot (in ms). If None, plot entire simulation.
         layer : str
             The layer to plot. Can be one of 'agg', 'L2', and 'L5'
         decimate : int
@@ -501,7 +423,6 @@ class Dipole(object):
         fig : instance of plt.fig
             The matplotlib figure handle.
         """
-
         return plot_dipole(self, tmin=tmin, tmax=tmax, ax=ax, layer=layer,
                            decim=decim, color=color, show=show)
 
@@ -660,7 +581,7 @@ class Dipole(object):
         # normalized ones
         self.data['agg'] = self.data['L2'] + self.data['L5']
 
-    def _write_txt(self, fname):
+    def write(self, fname):
         """Write dipole values to a file.
 
         Parameters
@@ -672,15 +593,11 @@ class Dipole(object):
         -------
         A tab separatd txt file where rows correspond
             to samples and columns correspond to
-            1) time (ms),
+            1) time (s),
             2) aggregate current dipole (scaled nAm),
             3) L2/3 current dipole (scaled nAm), and
             4) L5 current dipole (scaled nAm)
         """
-
-        warnings.warn('Writing dipole to txt file is deprecated '
-                      'and will be removed in future versions. '
-                      'Please use hdf5', DeprecationWarning, stacklevel=2)
 
         if self.nave > 1:
             warnings.warn("Saving Dipole to file that is an average of %d"
@@ -694,60 +611,3 @@ class Dipole(object):
         X = np.r_[X].T
 
         np.savetxt(fname, X, fmt=fmt, delimiter='\t')
-
-    def _write_hdf5(self, fname):
-        """Write dipole values to a hdf5 file.
-
-        Parameters
-        ----------
-        fname : str
-            Full path to the output file (.hdf5)
-        Outputs
-        -------
-        A hdf5 file containing the dipole object
-        """
-        print(f'Writing file {fname}')
-        dpl_data = dict()
-        dpl_data['object_type'] = "Dipole"
-        dpl_data['times'] = self.times
-        dpl_data['sfreq'] = self.sfreq
-        dpl_data['nave'] = self.nave
-        dpl_data['data'] = self.data
-        dpl_data['scale_applied'] = self.scale_applied
-        write_hdf5(fname, dpl_data, overwrite=True)
-
-    def write(self, fname, overwrite=True):
-        """Write dipole values to a txt or hdf5 file.
-
-        Parameters
-        ----------
-        fname : str | Path object
-            Full path to the output file (.txt or .hdf5)
-
-        Outputs
-        -------
-        A tab separatd txt file where rows correspond
-            to samples and columns correspond to
-            1) time (ms),
-            2) aggregate current dipole (scaled nAm),
-            3) L2/3 current dipole (scaled nAm), and
-            4) L5 current dipole (scaled nAm)
-        OR
-        A hdf5 file containing the dipole object
-        """
-        # For supporting tests in test_gui.py
-        if isinstance(fname, StringIO):
-            return self._write_txt(fname)
-
-        fname = str(fname)
-        if overwrite is False and os.path.exists(fname):
-            raise FileExistsError('File already exists at path %s. Rename '
-                                  'the file or set overwrite=True.' % (fname,))
-        file_extension = os.path.splitext(fname)[-1]
-        if file_extension == '.txt':
-            self._write_txt(fname)
-        elif file_extension == '.hdf5':
-            self._write_hdf5(fname)
-        else:
-            raise NameError('File extension should be either txt or hdf5, but '
-                            'the given extension is %s.' % (file_extension,))

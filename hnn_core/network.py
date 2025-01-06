@@ -9,7 +9,6 @@
 
 import itertools as it
 from copy import deepcopy
-from collections import OrderedDict, defaultdict
 
 import numpy as np
 import warnings
@@ -23,9 +22,6 @@ from .viz import plot_cells
 from .externals.mne import _validate_type, _check_option
 from .extracellular import ExtracellularArray
 from .check import _check_gids, _gid_to_type, _string_input_to_list
-from .hnn_io import write_network_configuration, network_to_dict
-from .externals.mne import copy_doc
-from typing import Union
 
 
 def _create_cell_coords(n_pyr_x, n_pyr_y, zdiff, inplane_distance):
@@ -58,70 +54,52 @@ def _create_cell_coords(n_pyr_x, n_pyr_y, zdiff, inplane_distance):
     Notes
     -----
     Common positions are all located at origin.
-    Sort of a hack because of redundancy.
+    Sort of a hack bc of redundancy
     """
-    def _calc_pyramidal_coord(xxrange, yyrange, zdiff):
-        list_coords = [pos for pos in it.product(xxrange, yyrange, [zdiff])]
-        return list_coords
+    pos_dict = dict()
 
-    def _calc_basket_coord(n_pyr_x, n_pyr_y, zdiff, inplane_distance, weight):
-        xzero = np.arange(0, n_pyr_x, 3) * inplane_distance
-        xone = np.arange(1, n_pyr_x, 3) * inplane_distance
-        # split even and odd y vals
-        yeven = np.arange(0, n_pyr_y, 2) * inplane_distance
-        yodd = np.arange(1, n_pyr_y, 2) * inplane_distance
-        # create general list of x,y coords and sort it
-        coords = [pos for pos in it.product(
-            xzero, yeven)] + [pos for pos in it.product(xone, yodd)]
-        coords_sorted = sorted(coords, key=lambda pos: pos[1])
-
-        # append the z value for position
-        list_coords = [(pos_xy[0], pos_xy[1], weight * zdiff)
-                       for pos_xy in coords_sorted]
-
-        return list_coords
-
-    def _calc_origin(xxrange, yyrange, zdiff):
-        # origin's z component isn't used in calculating distance functions.
-        # will be used for adding external drives.
-        origin_x = xxrange[int((len(xxrange) - 1) // 2)]
-        origin_y = yyrange[int((len(yyrange) - 1) // 2)]
-        origin_z = np.floor(zdiff / 2)
-        origin = (origin_x, origin_y, origin_z)
-        return origin
-
-    # Calculate distances
+    # PYRAMIDAL CELLS
     xxrange = np.arange(n_pyr_x) * inplane_distance
     yyrange = np.arange(n_pyr_y) * inplane_distance
 
-    pos_dict = {
-        'L5_pyramidal': _calc_pyramidal_coord(xxrange, yyrange, zdiff=0),
-        'L2_pyramidal': _calc_pyramidal_coord(xxrange, yyrange, zdiff=zdiff),
-        'L5_basket': _calc_basket_coord(n_pyr_x, n_pyr_y, zdiff,
-                                        inplane_distance, weight=0.2
-                                        ),
-        'L2_basket': _calc_basket_coord(n_pyr_x, n_pyr_y, zdiff,
-                                        inplane_distance, weight=0.8
-                                        ),
-        'origin': _calc_origin(xxrange, yyrange, zdiff),
-    }
+    pos_dict['L5_pyramidal'] = [
+        pos for pos in it.product(xxrange, yyrange, [0])]
+    pos_dict['L2_pyramidal'] = [
+        pos for pos in it.product(xxrange, yyrange, [zdiff])]
+
+    # BASKET CELLS
+    xzero = np.arange(0, n_pyr_x, 3) * inplane_distance
+    xone = np.arange(1, n_pyr_x, 3) * inplane_distance
+    # split even and odd y vals
+    yeven = np.arange(0, n_pyr_y, 2) * inplane_distance
+    yodd = np.arange(1, n_pyr_y, 2) * inplane_distance
+    # create general list of x,y coords and sort it
+    coords = [pos for pos in it.product(
+        xzero, yeven)] + [pos for pos in it.product(xone, yodd)]
+    coords_sorted = sorted(coords, key=lambda pos: pos[1])
+    # append the z value for position for L2 and L5
+    # print(len(coords_sorted))
+
+    pos_dict['L5_basket'] = [(pos_xy[0], pos_xy[1], 0.2 * zdiff) for
+                             pos_xy in coords_sorted]
+    pos_dict['L2_basket'] = [(pos_xy[0], pos_xy[1], 0.8 * zdiff) for
+                             pos_xy in coords_sorted]
+    pos_dict['L2GABAb_basket'] = [(pos_xy[0], pos_xy[1], 0.8 * zdiff) for
+                             pos_xy in coords_sorted]
+                             
+    # ORIGIN
+    # origin's z component isn't really used in
+    # calculating distance functions from origin
+    # these will be forced as ints!
+    origin_x = xxrange[int((len(xxrange) - 1) // 2)]
+    origin_y = yyrange[int((len(yyrange) - 1) // 2)]
+    origin_z = np.floor(zdiff / 2)
+    origin = (origin_x, origin_y, origin_z)
+
+    # save the origin for adding external drives later
+    pos_dict['origin'] = origin
 
     return pos_dict
-
-
-def _compare_lists(s, t):
-    """
-    Compares lists for equality
-
-    From https://stackoverflow.com/a/7829388
-    """
-    t = list(t)  # make a mutable copy
-    try:
-        for elem in s:
-            t.remove(elem)
-    except ValueError:
-        return False
-    return not t
 
 
 def _connection_probability(conn, probability, conn_seed=None):
@@ -137,7 +115,7 @@ def _connection_probability(conn, probability, conn_seed=None):
         Defaults to 1.0 producing an all-to-all pattern.
     conn_seed : int
         Optional initial seed for random number generator (default: None).
-        Used to randomly remove connections when probability < 1.0.
+        Used to randomly remove connections when probablity < 1.0.
 
     Notes
     -----
@@ -194,12 +172,12 @@ def pick_connection(net, src_gids=None, target_gids=None,
     src_gids : str | int | range | list of int | None
         Identifier for source cells. Passing str arguments
         ('L2_pyramidal', 'L2_basket', 'L5_pyramidal', 'L5_basket') is
-        equivalent to passing a list of gids for the relevant cell type.
+        equivalent to passing a list of gids for the relvant cell type.
         source - target connections are made in an all-to-all pattern.
     target_gids : str | int | range | list of int | None
-        Identifier for targets of source cells. Passing str arguments
+        Identifer for targets of source cells. Passing str arguments
         ('L2_pyramidal', 'L2_basket', 'L5_pyramidal', 'L5_basket') is
-        equivalent to passing a list of gids for the relevant cell type.
+        equivalent to passing a list of gids for the relvant cell type.
         source - target connections are made in an all-to-all pattern.
     loc : str | list of str | None
         Location of synapse on target cell. Must be
@@ -233,11 +211,10 @@ def pick_connection(net, src_gids=None, target_gids=None,
     # Convert src and target gids to lists
     valid_srcs = list(net.gid_ranges.keys())  # includes drives as srcs
     valid_targets = list(net.cell_types.keys())
-    src_gids_checked = _check_gids(src_gids, net.gid_ranges,
-                                   valid_srcs, 'src_gids', same_type=False)
-    target_gids_checked = _check_gids(target_gids, net.gid_ranges,
-                                      valid_targets, 'target_gids',
-                                      same_type=False)
+    src_gids = _check_gids(src_gids, net.gid_ranges,
+                           valid_srcs, 'src_gids', same_type=False)
+    target_gids = _check_gids(target_gids, net.gid_ranges,
+                              valid_targets, 'target_gids', same_type=False)
 
     _validate_type(loc, (str, list, None), 'loc', 'str, list, or None')
     _validate_type(receptor, (str, list, None), 'receptor',
@@ -247,59 +224,60 @@ def pick_connection(net, src_gids=None, target_gids=None,
     valid_receptor = ['ampa', 'nmda', 'gabaa', 'gabab']
 
     # Convert receptor and loc to list
-    loc_list = _string_input_to_list(loc, valid_loc, 'loc')
-    receptor_list = _string_input_to_list(receptor, valid_receptor, 'receptor')
+    loc = _string_input_to_list(loc, valid_loc, 'loc')
+    receptor = _string_input_to_list(receptor, valid_receptor, 'receptor')
 
     # Create lookup dictionaries
-    src_dict, target_dict = defaultdict(list), defaultdict(list)
-    loc_dict, receptor_dict = defaultdict(list), defaultdict(list)
+    src_dict, target_dict = dict(), dict()
+    loc_dict, receptor_dict = dict(), dict()
     for conn_idx, conn in enumerate(net.connectivity):
         # Store connections matching each src_gid
         for src_gid in conn['src_gids']:
-            src_dict[src_gid].append(conn_idx)
-
+            if src_gid in src_dict:
+                src_dict[src_gid].append(conn_idx)
+            else:
+                src_dict[src_gid] = [conn_idx]
         # Store connections matching each target_gid
         for target_gid in conn['target_gids']:
-            target_dict[target_gid].append(conn_idx)
-
+            if target_gid in target_dict:
+                target_dict[target_gid].append(conn_idx)
+            else:
+                target_dict[target_gid] = [conn_idx]
         # Store connections matching each location
-        loc_dict[conn['loc']].append(conn_idx)
-
+        if conn['loc'] in loc_dict:
+            loc_dict[conn['loc']].append(conn_idx)
+        else:
+            loc_dict[conn['loc']] = [conn_idx]
         # Store connections matching each receptor
-        receptor_dict[conn['receptor']].append(conn_idx)
+        if conn['receptor'] in receptor_dict:
+            receptor_dict[conn['receptor']].append(conn_idx)
+        else:
+            receptor_dict[conn['receptor']] = [conn_idx]
 
-    # Look up conn indices that match search terms and add to set.
+    # Look up conn indeces that match search terms and add to set.
     conn_set = set()
-    search_pairs = [(src_gids_checked, src_dict),
-                    (target_gids_checked, target_dict),
-                    (loc_list, loc_dict),
-                    (receptor_list, receptor_dict),
-                    ]
+    search_pairs = [(src_gids, src_dict), (target_gids, target_dict),
+                    (loc, loc_dict), (receptor, receptor_dict)]
     for search_terms, search_dict in search_pairs:
-        if search_terms:
-            inner_set = set()
-            # Union of indices which match inputs for single parameter
-            for term in search_terms:
-                inner_set = inner_set.union(search_dict.get(term, list()))
-
-            # Empty search
-            if not inner_set:
+        inner_set = set()
+        # Union of indices which match inputs for single parameter
+        for term in search_terms:
+            inner_set = inner_set.union(search_dict.get(term, list()))
+        # Intersection across parameters
+        if conn_set and inner_set:
+            conn_set = conn_set.intersection(inner_set)
+            # If at any point there's no matching elements, return empty
+            if not conn_set:
                 return list()
-            # Initial search has results
-            elif inner_set and not conn_set:
-                conn_set = inner_set.copy()
-            # Subsequent searches have results
-            elif inner_set and conn_set:
-                # Intersect across parameters
-                conn_set = conn_set.intersection(inner_set)
-                # If at any point there's no matching elements, return empty
-                if not conn_set:
-                    return list()
+        else:
+            conn_set = conn_set.union(inner_set)
 
-    return sorted(conn_set)
+    conn_set = list(conn_set)
+    conn_set.sort()
+    return conn_set
 
 
-class Network:
+class Network(object):
     """The Network class.
 
     Parameters
@@ -313,9 +291,6 @@ class Network:
     legacy_mode : bool
         Set to True by default to enable matching HNN GUI output when drives
         are added suitably. Will be deprecated in a future release.
-    mesh_shape : tuple of int (default: (10, 10))
-        Defines the (n_x, n_y) shape of the grid of pyramidal cells.
-
 
     Attributes
     ----------
@@ -359,14 +334,14 @@ class Network:
 
     Notes
     -----
-    ``net = jones_2009_model(params)`` is the recommended path for creating a
+    ``net = jones_2009_model(params)`` is the reccomended path for creating a
     network. Instantiating the network as ``net = Network(params)`` will
     produce a network with no cell-to-cell connections. As such,
     connectivity information contained in ``params`` will be ignored.
     """
 
     def __init__(self, params, add_drives_from_params=False,
-                 legacy_mode=False, mesh_shape=(10, 10)):
+                 legacy_mode=False):
         # Save the parameters used to create the Network
         _validate_type(params, dict, 'params')
         self._params = params
@@ -375,9 +350,8 @@ class Network:
         # We want it to remain in each Network object, so that the user can
         # interrogate a built and simulated net. In addition, CellResponse is
         # attached to a Network during simulation---Network is the natural
-        # place to keep this information. Order matters: cell gids first, then
-        # artificial drive cells
-        self.gid_ranges = OrderedDict()
+        # place to keep this information
+        self.gid_ranges = dict()
         self._n_gids = 0  # utility: keep track of last GID
 
         # XXX this can be removed once tests are made independent of HNN GUI
@@ -394,6 +368,7 @@ class Network:
         cell_types = {
             'L2_basket': basket(cell_name=_short_name('L2_basket')),
             'L2_pyramidal': pyramidal(cell_name=_short_name('L2_pyramidal')),
+            'L2GABAb_basket': basket(cell_name=_short_name('L2GABAb_basket')),
             'L5_basket': basket(cell_name=_short_name('L5_basket')),
             'L5_pyramidal': pyramidal(cell_name=_short_name('L5_pyramidal'))
         }
@@ -417,25 +392,13 @@ class Network:
         self.pos_dict = dict()
         self.cell_types = dict()
 
-        # set the mesh shape
-        _validate_type(mesh_shape, tuple, 'mesh_shape')
-        _validate_type(mesh_shape[0], int, 'mesh_shape[0]')
-        _validate_type(mesh_shape[1], int, 'mesh_shape[1]')
-
-        if mesh_shape[0] < 1 or mesh_shape[1] < 1:
-            raise ValueError('mesh_shape must be a tuple of positive '
-                             f'integers, got: {mesh_shape}')
-
-        self._N_pyr_x = mesh_shape[0]
-        self._N_pyr_y = mesh_shape[1]
-
+        self._N_pyr_x = self._params['N_pyr_x']
+        self._N_pyr_y = self._params['N_pyr_y']
         self._inplane_distance = 1.0  # XXX hard-coded default
         self._layer_separation = 1307.4  # XXX hard-coded default
         self.set_cell_positions(inplane_distance=self._inplane_distance,
                                 layer_separation=self._layer_separation)
 
-        # populates self.gid_ranges for the 1st time: order matters for
-        # NetworkBuilder!
         for cell_name in cell_types:
             self._add_cell_type(cell_name, self.pos_dict[cell_name],
                                 cell_template=cell_types[cell_name])
@@ -443,41 +406,15 @@ class Network:
         if add_drives_from_params:
             _add_drives_from_params(self)
 
-        self._tstop = None
-        self._dt = None
-
     def __repr__(self):
         class_name = self.__class__.__name__
         s = ("%d x %d Pyramidal cells (L2, L5)"
              % (self._N_pyr_x, self._N_pyr_y))
-        s += ("\n%d L2 basket cells\n%d L5 basket cells"
+        s += ("\n%d L2 basket cells\n%d L2GABAb basket cells\n%d L5 basket cells"
               % (len(self.pos_dict['L2_basket']),
+                 len(self.pos_dict['L2GABAb_basket']),
                  len(self.pos_dict['L5_basket'])))
         return '<%s | %s>' % (class_name, s)
-
-    def __eq__(self, other):
-        if not isinstance(other, Network):
-            return NotImplemented
-
-        # Check connectivity
-        if ((len(self.connectivity) != len(other.connectivity)) or
-                not (_compare_lists(self.connectivity, other.connectivity))):
-            return False
-
-        # Check all other attributes
-        attrs_to_ignore = ['connectivity']
-        for attr in vars(self).keys():
-            if attr.startswith('_') or attr in attrs_to_ignore:
-                continue
-
-            if hasattr(self, attr) and hasattr(other, attr):
-                if getattr(self, attr) != getattr(other, attr):
-                    return False
-            else:
-                # Does not have the same set of attributes
-                return False
-
-        return True
 
     def set_cell_positions(self, *, inplane_distance=None,
                            layer_separation=None):
@@ -582,7 +519,7 @@ class Network:
             this evoked drive across the network in a given trial with one
             spike, set n_drive_cells=1 and cell_specific=False.
         cell_specific : bool
-            Whether each artificial drive cell has 1-to-1 (True, default) or
+            Whether each artifical drive cell has 1-to-1 (True, default) or
             all-to-all (False) connection parameters. Note that 1-to-1
             connectivity requires that n_drive_cells='n_cells', where 'n_cells'
             denotes the number of all available cells that this drive can
@@ -616,7 +553,7 @@ class Network:
             Not fixed across trials (see Notes)
         conn_seed : int
             Optional initial seed for random number generator (default: 3).
-            Used to randomly remove connections when probability < 1.0.
+            Used to randomly remove connections when probablity < 1.0.
             Fixed across trials (see Notes)
 
         Notes
@@ -644,11 +581,6 @@ class Network:
         drive['conn_seed'] = conn_seed
         drive['dynamics'] = dict(mu=mu, sigma=sigma, numspikes=numspikes)
         drive['events'] = list()
-        # Need to save this information
-        drive['weights_ampa'] = weights_ampa
-        drive['weights_nmda'] = weights_nmda
-        drive['synaptic_delays'] = synaptic_delays
-        drive['probability'] = probability
 
         self._attach_drive(name, drive, weights_ampa, weights_nmda, location,
                            space_constant, synaptic_delays,
@@ -694,7 +626,7 @@ class Network:
             to synchronize the timing of Poisson drive across the network in a
             given trial, set n_drive_cells=1 and cell_specific=False.
         cell_specific : bool
-            Whether each artificial drive cell has 1-to-1 (True, default) or
+            Whether each artifical drive cell has 1-to-1 (True, default) or
             all-to-all (False) connection parameters. Note that 1-to-1
             connectivity requires that n_drive_cells='n_cells', where 'n_cells'
             denotes the number of all available cells that this drive can
@@ -727,7 +659,7 @@ class Network:
             Used to generate event times for drive cells.
         conn_seed : int
             Optional initial seed for random number generator (default: 3).
-            Used to randomly remove connections when probability < 1.0.
+            Used to randomly remove connections when probablity < 1.0.
         """
 
         _check_drive_parameter_values('Poisson', tstart=tstart,
@@ -745,10 +677,9 @@ class Network:
                                  f"n_drive_cells='n_cells'. Got cell_specific"
                                  f" cell_specific={cell_specific} and "
                                  f"n_drive_cells={n_drive_cells}.")
-        elif isinstance(rate_constant, (float, int)):
-            if cell_specific:
-                rate_constant = {cell_type: rate_constant for cell_type in
-                                 target_populations}
+        elif isinstance(rate_constant, float):
+            rate_constant = {cell_type: rate_constant for cell_type in
+                             target_populations}
 
         drive = _NetworkDrive()
         drive['type'] = 'poisson'
@@ -759,11 +690,6 @@ class Network:
         drive['dynamics'] = dict(tstart=tstart, tstop=tstop,
                                  rate_constant=rate_constant)
         drive['events'] = list()
-        # Need to save this information
-        drive['weights_ampa'] = weights_ampa
-        drive['weights_nmda'] = weights_nmda
-        drive['synaptic_delays'] = synaptic_delays
-        drive['probability'] = probability
 
         self._attach_drive(name, drive, weights_ampa, weights_nmda, location,
                            space_constant, synaptic_delays,
@@ -816,7 +742,7 @@ class Network:
             all-to-all connectivity and provide synchronous input to cells in
             the network.
         cell_specific : bool
-            Whether each artificial drive cell has 1-to-1 (True) or all-to-all
+            Whether each artifical drive cell has 1-to-1 (True) or all-to-all
             (False, default) connection parameters. Note that 1-to-1
             connectivity requires that n_drive_cells='n_cells', where 'n_cells'
             denotes the number of all available cells that this drive can
@@ -849,7 +775,7 @@ class Network:
             Used to generate event times for drive cells.
         conn_seed : int
             Optional initial seed for random number generator (default: 3).
-            Used to randomly remove connections when probability < 1.0.
+            Used to randomly remove connections when probablity < 1.0.
         """
         if not self._legacy_mode:
             _check_drive_parameter_values('bursty', tstart=tstart, tstop=tstop,
@@ -870,11 +796,6 @@ class Network:
                                  burst_rate=burst_rate, burst_std=burst_std,
                                  numspikes=numspikes, spike_isi=spike_isi)
         drive['events'] = list()
-        # Need to save this information
-        drive['weights_ampa'] = weights_ampa
-        drive['weights_nmda'] = weights_nmda
-        drive['synaptic_delays'] = synaptic_delays
-        drive['probability'] = probability
 
         self._attach_drive(name, drive, weights_ampa, weights_nmda, location,
                            space_constant, synaptic_delays,
@@ -926,7 +847,7 @@ class Network:
             drive across the network in a given trial with one spike, set
             n_drive_cells=1 and cell_specific=False.
         cell_specific : bool
-            Whether each artificial drive cell has 1-to-1 (True) or all-to-all
+            Whether each artifical drive cell has 1-to-1 (True) or all-to-all
             (False) connection parameters. Note that 1-to-1
             connectivity requires that n_drive_cells='n_cells', where 'n_cells'
             denotes the number of all available cells that this drive can
@@ -954,11 +875,6 @@ class Network:
         if not target_populations.issubset(set(self.cell_types.keys())):
             raise ValueError('Allowed drive target cell types are: ',
                              f'{self.cell_types.keys()}')
-
-        # enforce the same order as in self.cell_types - necessary for
-        # consistent source gid assignment
-        target_populations = [cell_type for cell_type in self.cell_types.keys()
-                              if cell_type in target_populations]
 
         # Ensure location exists for all target cells
         cell_sections = [set(self.cell_types[cell_type].sections.keys()) for
@@ -1064,6 +980,8 @@ class Network:
                         self.connectivity[-1]['src_gids'] = \
                             self.connectivity[-2]['src_gids']
 
+            seed_increment += 1
+
     def _reset_drives(self):
         # reset every time called again, e.g., from dipole.py or in self.copy()
         for drive_name in self.external_drives.keys():
@@ -1086,7 +1004,7 @@ class Network:
 
         NB this must be a separate method because dipole.py:simulate_dipole
         accepts an n_trials-argument, which overrides the N_trials-parameter
-        used at initialisation time. The good news is that only the event_times
+        used at intialisation time. The good news is that only the event_times
         need to be recalculated, all the GIDs etc remain the same.
         """
         self._reset_drives()
@@ -1098,7 +1016,6 @@ class Network:
                 for drive_cell_gid in self.gid_ranges[drive['name']]:
                     drive_cell_gid_offset = (drive_cell_gid -
                                              self.gid_ranges[drive['name']][0])
-                    trial_seed_offset = self._n_gids
                     if drive['cell_specific']:
                         # loop over drives (one for each target cell
                         # population) and create event times
@@ -1115,8 +1032,7 @@ class Network:
                                 trial_idx=trial_idx,
                                 drive_cell_gid=drive_cell_gid_offset,
                                 event_seed=drive['event_seed'],
-                                tstop=tstop,
-                                trial_seed_offset=trial_seed_offset)
+                                tstop=tstop)
                             )
                     else:
                         src_event_times = _drive_cell_event_times(
@@ -1126,62 +1042,48 @@ class Network:
                             target_type='any',
                             trial_idx=trial_idx,
                             drive_cell_gid=drive_cell_gid_offset,
-                            event_seed=drive['event_seed'],
-                            trial_seed_offset=trial_seed_offset)
+                            event_seed=drive['event_seed'])
                         event_times.append(src_event_times)
                 # 'events': nested list (n_trials x n_drive_cells x n_events)
                 self.external_drives[
                     drive['name']]['events'].append(event_times)
 
-    def add_tonic_bias(self, *, cell_type=None, amplitude, t0=0, tstop=None):
-        """Attaches parameters of tonic bias input for given cell types
+    def add_tonic_bias(self, *, cell_type=None, amplitude=None,
+                       t0=None, tstop=None):
+        """Attach parameters of tonic biasing input for a given cell type.
 
         Parameters
         ----------
-        cell_types : str | None
-            The name of the cell type to add a tonic input. When supplied,
-            a float value must be provided with the `amplitude` keyword.
-            Valid inputs are those listed in  `net.cell_types`.
-        amplitude: dict | float
-            A dictionary of cell type keys (str) to amplitude values (float).
-            Valid inputs for cell types are those listed in `net.cell_types`.
-            If `cell_types` is not None, `amplitude` should be
-            a float indicating the amplitude of the tonic input
-            for the specified cell type.
+        cell_type : str
+            The cell type whose cells will get the tonic input.
+            Valid inputs are those in `net.cell_types`.
+        amplitude : float
+            The amplitude of the input.
         t0 : float
             The start time of tonic input (in ms). Default: 0 (beginning of
-            simulation). This value will be applied to all the  tonic biases if
-            multiple are specified with the `amplitude` keyword.
+            simulation).
         tstop : float
             The end time of tonic input (in ms). Default: end of simulation.
-            This value will be applied to all the  tonic biases if
-            multiple are specified with the `amplitude` keyword.
         """
+        if (cell_type is None or amplitude is None):
+            raise ValueError('cell_type and amplitude must be defined'
+                             f', got {cell_type}, {amplitude}')
+        if 'tonic' not in self.external_biases:
+            self.external_biases['tonic'] = dict()
+        if cell_type in self.external_biases['tonic']:
+            raise ValueError(f'Tonic bias already defined for {cell_type}')
+        if t0 is None:
+            t0 = 0
+        if cell_type not in self.cell_types:
+            raise ValueError(f'cell_type must be one of '
+                             f'{list(self.cell_types.keys())}. '
+                             f'Got {cell_type}')
 
-        # old functionality single cell type - amplitude
-        if cell_type is not None:
-            warnings.warn('cell_type argument will be deprecated and '
-                          'removed in future releases. Use amplitude as a '
-                          'cell_type:str,amplitude:float dictionary.'
-                          'Read the function docustring for more information',
-                          DeprecationWarning,
-                          stacklevel=1)
-            _validate_type(amplitude, (float, int), 'amplitude')
-
-            _add_cell_type_bias(network=self, cell_type=cell_type,
-                                amplitude=float(amplitude),
-                                t_0=t0, t_stop=tstop)
-        else:
-            _validate_type(amplitude, dict, 'amplitude')
-            if len(amplitude) == 0:
-                warnings.warn('No bias have been defined, no action taken',
-                              UserWarning, stacklevel=1)
-                return
-
-            for _cell_type, _amplitude in amplitude.items():
-                _add_cell_type_bias(network=self, cell_type=_cell_type,
-                                    amplitude=_amplitude,
-                                    t_0=t0, t_stop=tstop)
+        self.external_biases['tonic'][cell_type] = {
+            'amplitude': amplitude,
+            't0': t0,
+            'tstop': tstop
+        }
 
     def _add_cell_type(self, cell_name, pos, cell_template=None):
         """Add cell type by updating pos_dict and gid_ranges."""
@@ -1211,7 +1113,7 @@ class Network:
             equivalent to passing a list of gids for the relevant cell type.
             source - target connections are made in an all-to-all pattern.
         target_gids : str | int | range | list of int
-            Identifier for targets of source cells. Passing str arguments
+            Identifer for targets of source cells. Passing str arguments
             ('L2_pyramidal', 'L2_basket', 'L5_pyramidal', 'L5_basket') is
             equivalent to passing a list of gids for the relevant cell type.
             source - target connections are made in an all-to-all pattern.
@@ -1238,7 +1140,7 @@ class Network:
             Defaults to 1.0 producing an all-to-all pattern.
         conn_seed : int
             Optional initial seed for random number generator (default: None).
-            Used to randomly remove connections when probability < 1.0.
+            Used to randomly remove connections when probablity < 1.0.
 
         Notes
         -----
@@ -1293,7 +1195,7 @@ class Network:
                 raise AssertionError(
                     'All target_gids must be of the same type')
         conn['target_type'] = target_type
-        conn['target_gids'] = target_set
+        conn['target_gids'] = list(target_set)
         conn['num_targets'] = len(target_set)
 
         if len(target_gids) != len(src_gids):
@@ -1303,12 +1205,12 @@ class Network:
         gid_pairs = dict()
         for src_gid, target_src_pair in zip(src_gids, target_gids):
             if not allow_autapses:
-                mask = np.isin(target_src_pair, src_gid, invert=True)
+                mask = np.in1d(target_src_pair, src_gid, invert=True)
                 target_src_pair = np.array(target_src_pair)[mask].tolist()
             gid_pairs[src_gid] = target_src_pair
 
         conn['src_type'] = self.gid_to_type(src_gids[0])
-        conn['src_gids'] = set(src_gids)
+        conn['src_gids'] = list(set(src_gids))
         conn['num_srcs'] = len(src_gids)
 
         conn['gid_pairs'] = gid_pairs
@@ -1355,14 +1257,11 @@ class Network:
             _validate_type(item, (int, float), arg_name, 'int or float')
             conn['nc_dict'][key] = item
 
-        conn['nc_dict']['gain'] = 1.0
-
         # Probabilistically define connections
         if probability != 1.0:
             _connection_probability(conn, probability, conn_seed)
 
         conn['probability'] = probability
-        conn['allow_autapses'] = allow_autapses
 
         self.connectivity.append(deepcopy(conn))
 
@@ -1377,17 +1276,12 @@ class Network:
 
     def clear_drives(self):
         """Remove all drives defined in Network.connectivity"""
-        self.connectivity = [conn for conn in self.connectivity if
-                             conn['src_type'] not
-                             in self.external_drives.keys()]
-
-        for cell_name in list(self.gid_ranges.keys()):
-            if cell_name in self.external_drives:
-                self._n_gids -= len(self.gid_ranges[cell_name])
-                del self.gid_ranges[cell_name]
-                del self.pos_dict[cell_name]
-
+        connectivity = list()
+        for conn in self.connectivity:
+            if conn['src_type'] not in self.external_drives.keys():
+                connectivity.append(conn)
         self.external_drives = dict()
+        self.connectivity = connectivity
 
     def add_electrode_array(self, name, electrode_pos, *, conductivity=0.3,
                             method='psa', min_distance=0.5):
@@ -1427,76 +1321,6 @@ class Network:
                                      method=method,
                                      min_distance=min_distance)})
 
-    def update_weights(self, e_e=None, e_i=None,
-                       i_e=None, i_i=None, copy=False):
-        """Update synaptic weights of the network.
-
-        Parameters
-        ----------
-        e_e : float
-            Synaptic gain of excitatory to excitatory connections
-            (default None)
-        e_i : float
-            Synaptic gain of excitatory to inhibitory connections
-            (default None)
-        i_e : float
-            Synaptic gain of inhibitory to excitatory connections
-            (default None)
-        i_i : float
-            Synaptic gain of inhibitory to inhibitory connections
-            (default None)
-        copy : bool
-            If True, returns a copy of the network. If False,
-            the network is updated in place with a return of None.
-            (default False)
-
-        Returns
-        -------
-        net : instance of Network
-            A copy of the instance with updated synaptic gains if copy=True.
-
-        Notes
-        -----
-        Synaptic gains must be non-negative. The synaptic gains will only be
-        updated if a float value is provided. If None is provided
-        (the default), the synapticgain will remain unchanged.
-
-        """
-        _validate_type(copy, bool, 'copy')
-
-        net = self.copy() if copy else self
-
-        e_conns = pick_connection(self, receptor=['ampa', 'nmda'])
-        e_cells = np.concatenate([list(net.connectivity[
-            conn_idx]['src_gids']) for conn_idx in e_conns]).tolist()
-
-        i_conns = pick_connection(self, receptor=['gabaa', 'gabab'])
-        i_cells = np.concatenate([list(net.connectivity[
-            conn_idx]['src_gids']) for conn_idx in i_conns]).tolist()
-        conn_types = {
-            'e_e': (e_e, e_cells, e_cells),
-            'e_i': (e_i, e_cells, i_cells),
-            'i_e': (i_e, i_cells, e_cells),
-            'i_i': (i_i, i_cells, i_cells)
-        }
-
-        for conn_type, (gain, e_vals, i_vals) in conn_types.items():
-            if gain is None:
-                continue
-
-            _validate_type(gain, (int, float), conn_type, 'int or float')
-            if gain < 0.0:
-                raise ValueError("Synaptic gains must be non-negative."
-                                 f"Got {gain} for '{conn_type}'.")
-
-            conn_indices = pick_connection(net, src_gids=e_vals,
-                                           target_gids=i_vals)
-            for conn_idx in conn_indices:
-                net.connectivity[conn_idx]['nc_dict']['gain'] = gain
-
-        if copy:
-            return net
-
     def plot_cells(self, ax=None, show=True):
         """Plot the cells using Network.pos_dict.
 
@@ -1514,13 +1338,6 @@ class Network:
             The matplotlib figure handle.
         """
         return plot_cells(net=self, ax=ax, show=show)
-
-    def to_dict(self, write_output=False):
-        return network_to_dict(self, write_output=write_output)
-
-    @copy_doc(write_network_configuration)
-    def write_configuration(self, fname, overwrite=True):
-        write_network_configuration(self, fname, overwrite)
 
 
 class _Connectivity(dict):
@@ -1543,10 +1360,10 @@ class _Connectivity(dict):
         Number of unique source gids.
     num_targets : int
         Number of unique target gids.
-    src_gids : set of int
-        Set of unique source gids in connection.
-    target_gids : set of int
-        Set of unique target gids in connection.
+    src_gids : list of int
+        List of unique source gids in connection.
+    target_gids : list of int
+        List of unique target gids in connection.
     loc : str
         Location of synapse on target cell. Must be
         'proximal', 'distal', or 'soma'. Note that inhibitory synapses
@@ -1564,8 +1381,6 @@ class _Connectivity(dict):
             Synaptic delay in ms.
         lamtha : float
             Space constant.
-        gain : float
-            Multiplicative factor for synaptic weight.
     probability : float
         Probability of connection between any src-target pair.
         Defaults to 1.0 producing an all-to-all pattern.
@@ -1618,7 +1433,7 @@ class _NetworkDrive(dict):
         Each artificial drive cell has seed = event_seed + gid
     conn_seed : int
         Optional initial seed for random number generator.
-        Used to randomly remove connections when probability < 1.0.
+        Used to randomly remove connections when probablity < 1.0.
     target_types : set or list of str
         Names of cell types targeted by this drive (must be subset of
         net.cell_types.keys()).
@@ -1645,35 +1460,3 @@ class _NetworkDrive(dict):
                      f"{len(self['events'])} trial{plurl}")
         entr += '>'
         return entr
-
-
-def _add_cell_type_bias(network: Network, amplitude: Union[float, dict],
-                        cell_type=None,
-                        t_0=0, t_stop=None):
-
-    if network is None:
-        raise ValueError('The "network" parameter is required '
-                         'but was not provided')
-    if amplitude is None:
-        raise ValueError('The "amplitude" parameter is required '
-                         'but was not provided')
-
-    if cell_type is not None:
-        # Validate cell_type value
-        if cell_type not in network.cell_types:
-            raise ValueError(f'cell_type must be one of '
-                             f'{list(network.cell_types.keys())}. '
-                             f'Got {cell_type}')
-
-        if 'tonic' not in network.external_biases:
-            network.external_biases['tonic'] = dict()
-
-        if cell_type in network.external_biases['tonic']:
-            raise ValueError(f'Tonic bias already defined for {cell_type}')
-
-        cell_type_bias = {
-            'amplitude': amplitude,
-            't0': t_0,
-            'tstop': t_stop
-        }
-        network.external_biases['tonic'][cell_type] = cell_type_bias
