@@ -172,6 +172,11 @@ def jones_2009_model(params=None, add_drives_from_params=False,
     net.add_connection(
         src_cell, target_cell, loc, receptor, weight, delay, lamtha)
 
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L2_pyramidal'].synapses['gabab']['tau2'] = 200.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau1'] = 45.0
+    net.cell_types['L5_pyramidal'].synapses['gabab']['tau2'] = 200.0
+
     return net
 
 

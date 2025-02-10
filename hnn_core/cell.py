@@ -597,8 +597,12 @@ class Cell:
             for receptor in sections[sec_name].syns:
                 syn_key = f'{sec_name}_{receptor}'
                 seg = self._nrn_sections[sec_name](0.5)
-                self._nrn_synapses[syn_key] = self.syn_create(
-                    seg, **synapses[receptor])
+                if receptor != 'gabab':
+                    self._nrn_synapses[syn_key] = self.syn_create(
+                        seg, **synapses[receptor])
+                else:
+                    self._nrn_synapses[syn_key] = self.syn_create_gabab(
+                        seg, **synapses[receptor])
 
     def _create_sections(self, sections, cell_tree):
         """Create soma and set geometry.
@@ -839,6 +843,34 @@ class Cell:
         syn.tau2 = tau2
         return syn
 
+    def syn_create_gabab(self, secloc, e, tau1, tau2):
+        """Create a GABAb synapse with mod file.
+
+        Parameters
+        ----------
+        secloc : instance of nrn.Segment
+            The section location. E.g., soma(0.5).
+        e: float
+            Reverse potential (in mV)
+        tau1: float
+            Rise time (in ms)
+        tau2: float
+            Decay time (in ms)
+
+        Returns
+        -------
+        syn : instance of h.GABAB
+            A kinetic scheme synapse.
+        """
+        if not isinstance(secloc, nrn.Segment):
+            raise TypeError(f'secloc must be instance of'
+                            f'nrn.Segment. Got {type(secloc)}')
+        syn = h.GABAB(secloc) 
+        #syn.e = e
+        #syn.tau1 = tau1
+        #syn.tau2 = tau2
+        return syn   
+        
     def setup_source_netcon(self, threshold):
         """Created for _PC.cell and specifies SOURCES of spikes.
 
