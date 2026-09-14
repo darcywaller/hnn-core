@@ -15,6 +15,7 @@ from .network_models import (
     duecker_ET_model,
     diesburg_2024_model,
     waller_pfcbeta_model,
+    waller_add_default_drives,
 )
 from .cell import Cell
 from .cell_response import CellResponse, read_spikes
