@@ -1359,3 +1359,101 @@ def _insert_gabab_population(net, delta=35):
         net._n_cells += len(net.pos_dict[name])
 
     return net
+
+
+def waller_add_default_drives(net, stimulus_start):
+    """Add evoked drives for Successful Stop FC-ERP in ``waller_pfcbeta_model``.
+
+    Parameters
+    ----------
+    net : Instance of Network object
+        Network object created from calling ``waller_pfcbeta_model``.
+        Drives are added in place.
+    stimulus_start : float | int
+        Start time of sensory stimulus in ms. Drives will be added after the stimulus,
+        with respect to this time.
+
+    Returns
+    -------
+    net : Instance of Network object
+        Network object used to store the Waller model complete with its drives.
+    """
+
+    new_weights_ampa_p1 = {
+        "L2_basket": 0.08831,
+        "L2_pyramidal": 0.015,
+        "L2GABAb_basket": 0,
+        "L5_basket": 0.00001,
+        "L5_pyramidal": 0.02,
+    }
+    new_weights_nmda_p1 = {
+        "L2_basket": 0,
+        "L2_pyramidal": 0,
+        "L2GABAb_basket": 0,
+        "L5_basket": 0.025,
+        "L5_pyramidal": 0.02,
+    }
+
+    new_weights_ampa_d1 = {
+        "L2_basket": 0.006562,
+        "L2_pyramidal": 0.000007,
+        "L2GABAb_basket": 0,
+        "L5_pyramidal": 0.3,
+    }
+    new_weights_nmda_d1 = {
+        "L2_basket": 0.19482,
+        "L2_pyramidal": 0.004317,
+        "L2GABAb_basket": 0,
+        "L5_pyramidal": 0.060074,
+    }
+
+    new_weights_ampa_p2 = {
+        "L2_basket": 0.000003,
+        "L2_pyramidal": 1.43,
+        "L2GABAb_basket": 0,
+        "L5_basket": 0.008958,
+        "L5_pyramidal": 0.684013,
+    }
+    new_weights_nmda_p2 = {
+        "L2_basket": 0.05357,
+        "L2_pyramidal": 0.25,
+        "L2GABAb_basket": 0,
+        "L5_basket": 0.25,
+        "L5_pyramidal": 4,
+    }
+
+    # external drive timing params
+    net.add_evoked_drive(
+        "evprox1",
+        mu=stimulus_start + 145,
+        sigma=15,
+        numspikes=1,
+        weights_ampa=new_weights_ampa_p1,
+        weights_nmda=new_weights_nmda_p1,
+        location="proximal",
+        event_seed=3,
+    )
+
+    net.add_evoked_drive(
+        "evdist1",
+        mu=stimulus_start + 215.08,
+        sigma=18,
+        numspikes=1,
+        weights_ampa=new_weights_ampa_d1,
+        weights_nmda=new_weights_nmda_d1,
+        location="distal",
+        event_seed=4,
+    )
+
+    net.add_evoked_drive(
+        "evprox2",
+        mu=stimulus_start + 300,
+        sigma=50,
+        numspikes=2,
+        weights_ampa=new_weights_ampa_p2,
+        weights_nmda=new_weights_nmda_p2,
+        location="proximal",
+        event_seed=4,
+    )
+
+    return net
